@@ -367,6 +367,38 @@ def upsert_player_week_metrics(connection, rows):
     return len(rows)
 
 
+def upsert_player_week_stats(connection, rows):
+    if not rows:
+        return 0
+    connection.executemany(
+        """
+        INSERT INTO player_week_stats (
+          player_id, season, week, season_type, team, opponent_team,
+          fantasy_points_ppr, fantasy_points_half_ppr, fantasy_points_std,
+          passing_yards, rushing_yards, receiving_yards, receptions, touchdowns, turnovers,
+          stats_json, source, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(player_id, season, week, season_type, source) DO UPDATE SET
+          team=excluded.team,
+          opponent_team=excluded.opponent_team,
+          fantasy_points_ppr=excluded.fantasy_points_ppr,
+          fantasy_points_half_ppr=excluded.fantasy_points_half_ppr,
+          fantasy_points_std=excluded.fantasy_points_std,
+          passing_yards=excluded.passing_yards,
+          rushing_yards=excluded.rushing_yards,
+          receiving_yards=excluded.receiving_yards,
+          receptions=excluded.receptions,
+          touchdowns=excluded.touchdowns,
+          turnovers=excluded.turnovers,
+          stats_json=excluded.stats_json,
+          updated_at=excluded.updated_at
+        """,
+        rows,
+    )
+    return len(rows)
+
+
 def refresh_latest_metrics(connection):
     now = utc_now_iso()
     connection.execute("DELETE FROM player_latest_metrics")
@@ -662,38 +694,12 @@ def sync_sleeper_weekly_stats(connection, season):
             )
 
     inserted_metrics = upsert_player_week_metrics(connection, metric_rows)
-    if rows:
-        connection.executemany(
-            """
-            INSERT INTO player_week_stats (
-              player_id, season, week, season_type, team, opponent_team,
-              fantasy_points_ppr, fantasy_points_half_ppr, fantasy_points_std,
-              passing_yards, rushing_yards, receiving_yards, receptions, touchdowns, turnovers,
-              stats_json, source, updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(player_id, season, week, season_type, source) DO UPDATE SET
-              team=excluded.team,
-              opponent_team=excluded.opponent_team,
-              fantasy_points_ppr=excluded.fantasy_points_ppr,
-              fantasy_points_half_ppr=excluded.fantasy_points_half_ppr,
-              fantasy_points_std=excluded.fantasy_points_std,
-              passing_yards=excluded.passing_yards,
-              rushing_yards=excluded.rushing_yards,
-              receiving_yards=excluded.receiving_yards,
-              receptions=excluded.receptions,
-              touchdowns=excluded.touchdowns,
-              turnovers=excluded.turnovers,
-              stats_json=excluded.stats_json,
-              updated_at=excluded.updated_at
-            """,
-            rows,
-        )
+    inserted_stats = upsert_player_week_stats(connection, rows)
     if rows or inserted_metrics:
         connection.commit()
 
     return {
-        "stats_rows_upserted": len(rows),
+        "stats_rows_upserted": inserted_stats,
         "metrics_rows_upserted": inserted_metrics,
         "weeks_fetched": weeks_fetched,
     }
@@ -774,122 +780,120 @@ def sync_nflverse_player_stats(connection, season):
 
     asset_url = asset["url"]
     asset_year = asset.get("season_hint")
-    blob = fetch_bytes(asset_url)
-    if asset_url.endswith(".gz"):
-        blob = gzip.decompress(blob)
-
     gsis_map, name_map = build_player_lookup_maps(connection)
     now = utc_now_iso()
-    rows = []
-    metric_rows = []
-
-    text_stream = io.StringIO(blob.decode("utf-8", errors="ignore"))
-    reader = csv.DictReader(text_stream)
+    stats_rows_upserted = 0
+    metrics_rows_upserted = 0
+    stats_batch = []
+    metric_batch = []
+    stats_batch_size = 250
+    metric_batch_size = 12000
     selected_season = int(season)
     fallback_season_used = False
-    for row in reader:
-        try:
-            row_season = int(row.get("season", 0))
-            row_week = int(row.get("week", 0))
-        except (TypeError, ValueError):
-            continue
-        if row_season != selected_season:
-            if asset_year and row_season == asset_year and selected_season > asset_year:
-                fallback_season_used = True
-            else:
+    request = urllib.request.Request(asset_url, headers={"User-Agent": USER_AGENT})
+
+    def flush_batches():
+        nonlocal stats_rows_upserted, metrics_rows_upserted, stats_batch, metric_batch
+        wrote_any = False
+        if stats_batch:
+            stats_rows_upserted += upsert_player_week_stats(connection, stats_batch)
+            stats_batch = []
+            wrote_any = True
+        if metric_batch:
+            metrics_rows_upserted += upsert_player_week_metrics(connection, metric_batch)
+            metric_batch = []
+            wrote_any = True
+        if wrote_any:
+            connection.commit()
+
+    def process_reader(reader):
+        nonlocal fallback_season_used
+        for row in reader:
+            try:
+                row_season = int(row.get("season", 0))
+                row_week = int(row.get("week", 0))
+            except (TypeError, ValueError):
                 continue
-        if row_week <= 0:
-            continue
+            if row_season != selected_season:
+                if asset_year and row_season == asset_year and selected_season > asset_year:
+                    fallback_season_used = True
+                else:
+                    continue
+            if row_week <= 0:
+                continue
 
-        stats_player_id = str(row.get("player_id") or "")
-        player_id = gsis_map.get(stats_player_id)
+            stats_player_id = str(row.get("player_id") or "")
+            player_id = gsis_map.get(stats_player_id)
 
-        if not player_id:
-            search_name = normalize_name(row.get("player_display_name") or row.get("player_name"))
-            key = (search_name, row.get("recent_team", "") or "", row.get("position", "") or "")
-            player_id = name_map.get(key) or name_map.get((search_name, "", row.get("position", "") or ""))
-        if not player_id:
-            continue
+            if not player_id:
+                search_name = normalize_name(row.get("player_display_name") or row.get("player_name"))
+                key = (search_name, row.get("recent_team", "") or "", row.get("position", "") or "")
+                player_id = name_map.get(key) or name_map.get((search_name, "", row.get("position", "") or ""))
+            if not player_id:
+                continue
 
-        touchdowns = (
-            (safe_float(row.get("passing_tds")) or 0)
-            + (safe_float(row.get("rushing_tds")) or 0)
-            + (safe_float(row.get("receiving_tds")) or 0)
-        )
-        turnovers = (safe_float(row.get("interceptions")) or 0) + (safe_float(row.get("rushing_fumbles_lost")) or 0)
-
-        rows.append(
-            (
-                player_id,
-                row_season,
-                row_week,
-                "regular",
-                row.get("recent_team"),
-                row.get("opponent_team"),
-                safe_float(row.get("fantasy_points_ppr")),
-                safe_float(row.get("fantasy_points_half_ppr")),
-                safe_float(row.get("fantasy_points")),
-                safe_float(row.get("passing_yards")),
-                safe_float(row.get("rushing_yards")),
-                safe_float(row.get("receiving_yards")),
-                safe_float(row.get("receptions")),
-                touchdowns,
-                turnovers if turnovers else None,
-                json.dumps(row),
-                "nflverse",
-                now,
+            touchdowns = (
+                (safe_float(row.get("passing_tds")) or 0)
+                + (safe_float(row.get("rushing_tds")) or 0)
+                + (safe_float(row.get("receiving_tds")) or 0)
             )
-        )
+            turnovers = (safe_float(row.get("interceptions")) or 0) + (safe_float(row.get("rushing_fumbles_lost")) or 0)
 
-        metrics = flatten_numeric_metrics(row)
-        metrics["touchdowns"] = touchdowns
-        metrics["turnovers"] = turnovers
-        metric_rows.extend(
-            metric_rows_from_dict(
-                player_id=player_id,
-                season=row_season,
-                week=row_week,
-                season_type="regular",
-                source="nflverse",
-                metrics=metrics,
-                updated_at=now,
+            stats_batch.append(
+                (
+                    player_id,
+                    row_season,
+                    row_week,
+                    "regular",
+                    row.get("recent_team"),
+                    row.get("opponent_team"),
+                    safe_float(row.get("fantasy_points_ppr")),
+                    safe_float(row.get("fantasy_points_half_ppr")),
+                    safe_float(row.get("fantasy_points")),
+                    safe_float(row.get("passing_yards")),
+                    safe_float(row.get("rushing_yards")),
+                    safe_float(row.get("receiving_yards")),
+                    safe_float(row.get("receptions")),
+                    touchdowns,
+                    turnovers if turnovers else None,
+                    json.dumps(row),
+                    "nflverse",
+                    now,
+                )
             )
-        )
 
-    inserted_metrics = upsert_player_week_metrics(connection, metric_rows)
-    if rows:
-        connection.executemany(
-            """
-            INSERT INTO player_week_stats (
-              player_id, season, week, season_type, team, opponent_team,
-              fantasy_points_ppr, fantasy_points_half_ppr, fantasy_points_std,
-              passing_yards, rushing_yards, receiving_yards, receptions, touchdowns, turnovers,
-              stats_json, source, updated_at
+            metrics = flatten_numeric_metrics(row)
+            metrics["touchdowns"] = touchdowns
+            metrics["turnovers"] = turnovers
+            metric_batch.extend(
+                metric_rows_from_dict(
+                    player_id=player_id,
+                    season=row_season,
+                    week=row_week,
+                    season_type="regular",
+                    source="nflverse",
+                    metrics=metrics,
+                    updated_at=now,
+                )
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(player_id, season, week, season_type, source) DO UPDATE SET
-              team=excluded.team,
-              opponent_team=excluded.opponent_team,
-              fantasy_points_ppr=excluded.fantasy_points_ppr,
-              fantasy_points_half_ppr=excluded.fantasy_points_half_ppr,
-              fantasy_points_std=excluded.fantasy_points_std,
-              passing_yards=excluded.passing_yards,
-              rushing_yards=excluded.rushing_yards,
-              receiving_yards=excluded.receiving_yards,
-              receptions=excluded.receptions,
-              touchdowns=excluded.touchdowns,
-              turnovers=excluded.turnovers,
-              stats_json=excluded.stats_json,
-              updated_at=excluded.updated_at
-            """,
-            rows,
-        )
-    if rows or inserted_metrics:
-        connection.commit()
+
+            if len(stats_batch) >= stats_batch_size or len(metric_batch) >= metric_batch_size:
+                flush_batches()
+
+    with urllib.request.urlopen(request, timeout=180) as response:
+        if asset_url.endswith(".gz"):
+            with gzip.GzipFile(fileobj=response) as raw_stream:
+                with io.TextIOWrapper(raw_stream, encoding="utf-8", errors="ignore", newline="") as text_stream:
+                    process_reader(csv.DictReader(text_stream))
+        else:
+            with io.TextIOWrapper(response, encoding="utf-8", errors="ignore", newline="") as text_stream:
+                process_reader(csv.DictReader(text_stream))
+
+    flush_batches()
 
     return {
-        "stats_rows_upserted": len(rows),
-        "metrics_rows_upserted": inserted_metrics,
+        "stats_rows_upserted": stats_rows_upserted,
+        "metrics_rows_upserted": metrics_rows_upserted,
         "asset": asset_url,
         "asset_name": asset.get("name"),
         "asset_season_hint": asset_year,
