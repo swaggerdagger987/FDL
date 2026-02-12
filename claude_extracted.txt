@@ -1,0 +1,293 @@
+PageCount: 6
+
+===== Page 1 =====
+Fourth Down Labs: technical feasibility, market, and distribution research
+Building a dynasty fantasy football "adversarial intelligence" SaaS is technically feasible, competitively
+differentiated, and has a clear distribution path — with an estimated MVP cost under $80/month. The
+Sleeper API exposes all the raw data needed (FAAB bids, trade history, roster moves, draft picks) without
+authentication, nflverse provides free NFL statistical data under a commercial-friendly license, and no
+competitor has automated the leaguemate behavioral analysis that experienced dynasty players already do
+manually. The addressable market sits at roughly 1.5–3 million active dynasty players on Sleeper alone,
+concentrated in a single highly engaged subreddit (192K members) GummySearch
+that rewards tool-sharing.
+The Sleeper API gives you everything — for free
+The Sleeper API ( api.sleeper.app/v1/ ) requires no authentication, no API keys, and no OAuth. It is entirely
+read-only and free, with a rate limit of 1,000 requests per minute. sleeper Sleeper
+All responses are JSON.
+This is the foundation of the entire product.
+The endpoints that matter most for adversarial intelligence are the transaction endpoint
+( /league/{id}/transactions/{week} ), which returns every completed trade, waiver claim, and free agent pickup
+with full detail. For FAAB waivers, the response includes settings.waiver
+_
+bid showing the exact dollar amount
+bid. Trade transactions include adds , drops , draft
+_picks (with full ownership chains for future picks), creator ,
+and consenter
+_
+ids . sleeper Sleeper
+The roster endpoint returns each team's full player list, starters, IR, and
+critical metadata like waiver
+_
+budget
+used and total
+moves .
+_
+_
+sleeper
+Dynasty league history traversal works through the previous
+_
+league
+id field — each season creates a new
+_
+league ID but chains to the prior year. Recursing this chain gives you complete multi-season behavioral data
+for every manager: years of FAAB bids, trade patterns, draft tendencies, and roster decisions. This is the raw
+material for adversarial profiling that no one has systematized.
+Key limitations to design around: rejected/cancelled trade offers are invisible (only completed transactions
+appear), there is no chat data, no live scoring feed, and no write operations. The massive /players/nfl endpoint
+(~5MB) should be cached daily. sleeper Go Packages
+Undocumented endpoints at api.sleeper.com (no /v1/
+prefix) expose player stats and projections but could break without notice GitHub
+— use nflverse as the reliable
+stats backbone instead.
+nflverse delivers production-grade NFL data under open licensing
+The nflverse ecosystem is the de facto standard for open NFL analytics, GitHub
+providing play-by-play data
+back to 1999 nflfastR nflfastR
+with 370+ columns per row and ~48,000 plays per season. Python access is
+straightforward via nflreadpy (Polars-based, MIT license) github GitHub
+or the older nfl
+data
+_
+_py (pandas-
+based).
+GitHub
+
+===== Page 2 =====
+The dynasty-critical datasets and their access patterns:
+Player stats ( load
+_player
+_
+stats() ): 52 columns Bradcongelio
+including target
+_
+share , air
+_yards
+_
+share ,
+wopr (Weighted Opportunity Rating), nflfastr
+racr , receiving_
+epa , and pre-calculated
+fantasy_points
+_ppr nflfastR nflverse
+— updated nightly during season
+Snap counts ( load
+_
+snap_
+counts() ): offense
+_pct per player per game Bradcongelio GitHub
+since 2012,
+updated every 6 hours from Pro Football Reference
+nflverse
+Next Gen Stats ( load
+_
+nextgen
+_
+stats("receiving") ): avg_
+separation , avg_
+cushion ,
+avg_yac
+above
+_
+_
+expectation , percent
+share
+of
+intended
+air
+_
+_
+_
+_
+_yards nflverse
+— the closest public proxy for
+route-running quality
+FTN charting ( load
+ftn
+_
+_
+charting() ): Play-action flags, screen passes, RPOs, contested catches, QB read
+number — manually charted context since 2022
+nflverse Nflverse
+Draft picks and combine ( load
+draft
+_
+_picks(), load
+_
+combine() ): Historical draft capital and athletic
+profiles for prospect evaluation
+Cross-platform player IDs ( load
+ff
+_
+_playerids() ): Maps between Sleeper IDs, ESPN, Yahoo, PFF, PFR,
+and GSIS — essential for joining Sleeper roster data to nflverse stats
+The data is released under CC-BY-4.0 (commercial use allowed with attribution). github
+FTN charting data
+uses CC-BY-SA-4.0, requiring derivative works to use a compatible license. Nflverse
+One important gap: true
+"routes run" data is not publicly available — you would need PFF (paid) or approximate it from
+participation data joined to pass plays. Participation data itself has been delayed to post-season release since
+2023. The injury data source died after the 2024 season with no replacement announced.
+nflverse
+One direct competitor exists, but execution is shallow
+The dynasty tools landscape reveals a clear white space. Dynasty Dealmaker is the only product attempting
+leaguemate behavioral analysis, offering basic "Owner Psychology" profiling and AI-powered trade suggestions
+Dynastydealmaker
+via a token system ($1.49/week, ~$6/month). Their "Dynasty Wrapped" report card went viral
+on Reddit (831 upvotes). Dynastydealmaker
+But their implementation is surface-level — basic pattern
+identification without deep FAAB analysis, draft tendency modeling, or multi-season behavioral profiling.
+The established players occupy different niches and leave the adversarial space unaddressed:
+
+===== Page 3 =====
+Tool Model What it does What it doesn't do
+KeepTradeCut Free
+(donations)
+Crowdsourced dynasty values (24.7M data points),
+KeepTradeCut
+trade calculator
+No league-specific analysis
+whatsoever
+FantasyCalc Free core Algorithm-derived values from real trades No leaguemate profiling
+DynastyNerds $5–7/month Mobile app, AI trade suggestions, Film Room, custom
+rankings
+No adversarial features
+Dynasty
+Daddy
+Free +
+Patreon
+Broadest free toolset, 3.6M trade
+Dynasty Daddy
+database, playoff simulator
+No opponent analysis
+DLF $13/month Deepest analytics suite, 20+ tools No behavioral intelligence
+No tool analyzes FAAB spending patterns, trade behavior over time, draft tendency modeling, or
+combines roster needs with owner psychology for trade targeting. Multiple dynasty content creators have
+written about the value of tracking leaguemate tendencies manually — Footballguys published "Finding the
+Truth in Leaguemate Tendencies" in 2024 advocating for handwritten notebooks. Footballguys
+Fourth Down
+Labs would automate what the most sophisticated dynasty players already do by hand.
+The pricing sweet spot is $5–8/month based on the competitive landscape. A freemium model with basic league
+analysis free and adversarial intelligence gated at $6–8/month aligns with DynastyNerds ($5–7/month) and
+Dynasty Dealmaker (~$6/month) while offering a differentiated feature set.
+Distribution runs through 192K engaged dynasty managers on Reddit
+The r/DynastyFF subreddit has approximately 192,000 members GummySearch
+with consistently high activity
+GummySearch GummySearch
+year-round — a critical differentiator from r/fantasyfootball (3.4M members but
+seasonal). Dynasty managers trade, evaluate prospects, and manage rosters 12 months a year,
+Tech Glides
+creating sustained demand for tools.
+Content that performs best: original data-driven analysis, tool announcements from authentic community
+members, and player evaluation deep dives. A Sleeper employee's product update post received 457 upvotes
+and 194 comments, Paulrosenzweig
+demonstrating that tool promotion succeeds when the poster is transparent,
+the product solves real pain points, and the account has genuine community history. Free tools and original
+analysis are received far better than paid pitches.
+The distribution playbook: spend 2–3 months contributing genuine analysis (using Fourth Down Labs' own
+analytical framework) before launching. Share specific adversarial insights — "I analyzed 10,000 FAAB
+transactions and here's what I found about bidding psychology" — as standalone posts. This builds credibility
+
+===== Page 4 =====
+and generates organic demand. The community explicitly asks for better trade analysis, roster evaluation tools,
+and league-specific insights.
+Sleeper's platform demographics support the market thesis. The platform has 5–6 million users with 5
+million MAU, Skypage Sportico Tracxn
+valued at $400 million after raising $67.3 million (led by Andreessen
+Horowitz). Sleeper
+Sleeper is the undisputed #1 platform for dynasty leagues — while only ~15% of all fantasy
+players use Sleeper, Skypage
+dynasty/keeper leagues likely represent 30–50% of their leagues. That implies
+1.5–3 million active dynasty managers on Sleeper alone. The user base skews young (18–39), tech-savvy, and
+highly engaged with 75% retention CanvasBusinessModel Sportico
+and 20–40 minute sessions. These are exactly
+the users who would pay $6–8/month for a competitive edge.
+The solo-founder stack: Next.js, Supabase, Vercel, and AI copilots
+The consensus 2025 solo-founder SaaS stack is battle-tested and optimized for AI-assisted development:
+Core stack: Next.js 15+ (App Router) with TypeScript and Tailwind CSS, deployed on Vercel ($20/month
+Pro), with Supabase for PostgreSQL database, authentication, and edge functions (free tier → $25/month).
+Payments via Stripe (2.9% + $0.30 per transaction). Background data pipelines through Inngest (free tier →
+$25/month) for orchestrating Sleeper API pulls, stat updates, and LLM analysis jobs with built-in retries and
+throttling.
+This specific combination is optimal because React/TypeScript has the largest AI training corpus — both
+Claude Code and Cursor produce their highest-quality code for this stack. Claude Code excels at autonomous
+multi-file operations ("build the entire Sleeper API integration layer"), while Cursor handles day-to-day
+autocomplete and quick fixes. Using both together, a solo developer can realistically build and ship an MVP in
+4–8 weeks.
+Visualization uses Recharts via Tremor Tremor
+components — pre-styled dashboard elements (KPI cards,
+sparklines, trend charts) that save weeks of design work. For the fantasy football context: line charts for player
+value trends, radar charts for player profiles, bar charts for leaguemate FAAB patterns.
+Estimated monthly infrastructure costs:
+Stage Users Monthly cost
+MVP 0–100 $60–80
+Growth 100–1,000 $120–200
+Scale 1,000+ $250–400
+
+===== Page 5 =====
+The key architectural decision is the CLAUDE.md / .cursorrules configuration file documenting project
+structure, naming conventions, database schema, and coding standards. This is the single highest-leverage
+investment for AI-assisted development — both tools reference it continuously to maintain consistency.
+LLM costs stay manageable with a three-layer strategy
+The adversarial intelligence features require LLM integration for natural-language insights, but costs can be
+controlled to $0.30–1.50 per user per month through model routing, caching, and pre-computation.
+Model routing by task complexity handles 60–70% of cost optimization alone. Data summarization and
+simple player lookups route to GPT-4o mini ($0.15/$0.60 per million tokens) Price Per Token
+($1/$5). Anthropic nOps
+Standard trade analysis and player evaluations use Claude Sonnet ($3/$15). or Claude Haiku
+Only
+flagship "deep strategy" reports and complex multi-team trade analyses justify premium models. This tiered
+approach routes ~70% of requests to the cheapest tier.
+Three-layer caching compounds the savings. First, Anthropic's prompt caching stores static system prompts
+and league context Claude API Docs Anthropic at 90% input cost reduction on cache hits
+Mobisoft Infotech
+Anthropic
+— structure prompts with cached league settings and few-shot examples first, dynamic trade data last.
+Second, Redis/Upstash exact-match caching stores full responses keyed by prompt hash with TTLs aligned to
+data freshness (24 hours for player evaluations, 1 week for league-wide analysis, per-combination for trade
+analysis). Third, optional semantic caching via vector similarity can catch rephrased versions of the same
+question.
+Upstash
+Pre-computation is the biggest lever. Generate 60–70% of insights as background jobs — weekly power
+rankings, adversarial reports on every opponent, player value updates — using the Batch API at 50% discount
+from both Anthropic and OpenAI. Store results in Postgres, serve instantly. Only trade evaluations, custom
+scenarios, and follow-up questions need real-time LLM calls with streaming responses.
+The architecture for real-time analysis follows a structured RAG pattern: retrieve the specific league's scoring
+settings, relevant player stats, roster compositions, and transaction history from Postgres, inject into the prompt
+with XML tags, and route to the appropriate model tier. This is programmatic data retrieval, not vector search
+— the data is structured and relational.
+For production resilience, LiteLLM provides a unified API across providers with automatic retries, exponential
+backoff, and provider fallback chains LiteLLM
+(Claude Sonnet → GPT-4o → Claude Haiku → pre-computed
+fallback). Privacy concerns are minimal — fantasy football league data is low-sensitivity, both providers
+contractually commit to not training on API data, and basic data minimization (sending only relevant league
+context per request) is sufficient.
+Rohan-paul
+
+===== Page 6 =====
+Conclusion: a technically sound product with a clear competitive moat
+The research validates Fourth Down Labs across all three dimensions. Technical feasibility is high — the
+Sleeper API provides complete, free, unauthenticated access to every data point needed for adversarial analysis,
+and nflverse supplements it with production-grade NFL statistics. Market validation is strong — Dynasty
+Dealmaker proved demand with a viral launch, Dynastydealmaker
+but executed shallowly on the core concept.
+The gap between "basic owner psychology" and deep multi-season behavioral profiling (FAAB patterns, trade
+tendencies, draft modeling, roster-need-aware trade targeting) is the product opportunity. Distribution is
+concentrated — 192K members on r/DynastyFF GummySearch
+plus 1.5–3M dynasty managers on Sleeper,
+reachable through authentic community participation FRANKI T Online Moderation
+and a free tier.
+The most defensible moat will be the longitudinal behavioral data. Once a user connects their league and Fourth
+Down Labs begins tracking multi-season patterns, switching costs rise naturally — no competitor can
+retroactively reconstruct that historical analysis. The first product that transforms raw transaction logs into
+actionable opponent intelligence will own the "adversarial" category in dynasty fantasy football.
+

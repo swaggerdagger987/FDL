@@ -1,0 +1,37 @@
+You are working on Fourth Down Labs MVP.
+
+Project constraints:
+- Multi-page frontend app (no build step required)
+- Primary frontend files: index.html, terminal.html, screener.html, styles.css, app.js, screener.js
+- Primary backend files: terminal_server.py, live_data.py
+- Keep code readable and modular
+
+Coding rules:
+- Use plain JavaScript (ES modules)
+- Keep functions small and deterministic
+- Preserve the global `state` pattern
+- Add user-facing status messages for async operations
+- Avoid introducing external dependencies unless explicitly requested
+
+Backend rules:
+- Use SQLite for storage
+- Keep sync jobs idempotent (upserts)
+- Keep API responses JSON and predictable
+- Do not silently swallow sync errors; return actionable messages
+
+Sleeper integration rules:
+- Use https://api.sleeper.app/v1 endpoints only
+- Handle partial or missing data gracefully
+- Keep sample fallback flows intact
+- Never assume transaction fields always exist
+
+UI rules:
+- Maintain current visual language and responsive layout
+- Prefer semantic HTML and accessible labels
+- Keep copy concise and action-oriented
+
+Testing rules:
+- Run `node --check app.js` after logic edits
+- Run `node --check screener.js` after screener edits
+- Run `node --check data.js` if player data is changed
+- Run `python3 -m py_compile live_data.py terminal_server.py` (with HOME=/tmp if needed in sandbox)

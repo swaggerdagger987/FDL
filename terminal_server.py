@@ -1,0 +1,244 @@
+import argparse
+import json
+import os
+import threading
+import traceback
+from functools import partial
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
+
+import live_data
+
+BASE_DIR = Path(__file__).resolve().parent
+
+
+def first(query, key, default=None):
+    values = query.get(key)
+    if not values:
+        return default
+    return values[0]
+
+
+class TerminalRequestHandler(SimpleHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=str(BASE_DIR), **kwargs)
+
+    def do_GET(self):  # noqa: N802
+        parsed = urlparse(self.path)
+        if parsed.path.startswith("/api/"):
+            self.handle_api(parsed, method="GET")
+            return
+        if parsed.path == "/":
+            self.path = "/index.html"
+        super().do_GET()
+
+    def do_POST(self):  # noqa: N802
+        parsed = urlparse(self.path)
+        if parsed.path.startswith("/api/"):
+            self.handle_api(parsed, method="POST")
+            return
+        self.send_error(404, "Not Found")
+
+    def handle_api(self, parsed, method):
+        try:
+            query = parse_qs(parsed.query)
+            body = self.read_json_body() if method == "POST" else {}
+
+            with live_data.get_connection() as connection:
+                if parsed.path == "/api/health" and method == "GET":
+                    payload = live_data.fetch_health_summary(connection)
+                    self.send_json(200, payload)
+                    return
+
+                if parsed.path == "/api/filter-options" and method == "GET":
+                    items = live_data.fetch_filter_options(
+                        connection,
+                        {
+                            "search": first(query, "search", ""),
+                            "position": first(query, "position", ""),
+                            "team": first(query, "team", ""),
+                            "limit": first(query, "limit", "600"),
+                        },
+                    )
+                    self.send_json(200, {"count": len(items), "items": items})
+                    return
+
+                if parsed.path == "/api/players" and method == "GET":
+                    items = live_data.fetch_players(
+                        connection,
+                        {
+                            "search": first(query, "search", ""),
+                            "position": first(query, "position", ""),
+                            "team": first(query, "team", ""),
+                            "limit": first(query, "limit", "200"),
+                            "offset": first(query, "offset", "0"),
+                            "sort": first(query, "sort", "points_desc"),
+                        },
+                    )
+                    self.send_json(200, {"count": len(items), "items": items})
+                    return
+
+                if parsed.path == "/api/screener/query" and method == "POST":
+                    result = live_data.fetch_screener_query(connection, body)
+                    self.send_json(200, result)
+                    return
+
+                if parsed.path == "/api/screener" and method == "GET":
+                    items = live_data.fetch_screener(
+                        connection,
+                        {
+                            "search": first(query, "search", ""),
+                            "position": first(query, "position", ""),
+                            "team": first(query, "team", ""),
+                            "limit": first(query, "limit", "200"),
+                            "offset": first(query, "offset", "0"),
+                            "min_ppr": first(query, "min_ppr", ""),
+                            "min_passing_yards": first(query, "min_passing_yards", ""),
+                            "min_rushing_yards": first(query, "min_rushing_yards", ""),
+                            "min_receiving_yards": first(query, "min_receiving_yards", ""),
+                            "min_receptions": first(query, "min_receptions", ""),
+                        },
+                    )
+                    self.send_json(200, {"count": len(items), "items": items})
+                    return
+
+                if parsed.path.startswith("/api/players/") and method == "GET":
+                    player_id = parsed.path.split("/api/players/")[1]
+                    if not player_id:
+                        self.send_json(400, {"error": "player_id is required"})
+                        return
+                    history = live_data.fetch_player_history(
+                        connection,
+                        player_id=player_id,
+                        season=first(query, "season", None),
+                        limit=first(query, "limit", 36),
+                    )
+                    self.send_json(200, {"player_id": player_id, "items": history})
+                    return
+
+                if parsed.path == "/api/admin/sync" and method in {"GET", "POST"}:
+                    season = first(query, "season", live_data.current_nfl_season())
+                    summary = live_data.run_full_sync(connection, season=season, include_nflverse=True)
+                    self.send_json(200, {"ok": True, "summary": summary})
+                    return
+
+            self.send_json(404, {"error": f"Unknown endpoint: {parsed.path}"})
+        except Exception as error:  # noqa: BLE001
+            self.send_json(
+                500,
+                {
+                    "error": str(error),
+                    "traceback": traceback.format_exc(limit=6),
+                },
+            )
+
+    def end_headers(self):
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        super().end_headers()
+
+    def do_OPTIONS(self):  # noqa: N802
+        self.send_response(204)
+        self.end_headers()
+
+    def send_json(self, status_code, payload):
+        body = json.dumps(payload, ensure_ascii=True).encode("utf-8")
+        self.send_response(status_code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def read_json_body(self):
+        content_length = self.headers.get("Content-Length")
+        if not content_length:
+            return {}
+        try:
+            size = int(content_length)
+        except ValueError:
+            return {}
+        if size <= 0:
+            return {}
+        raw = self.rfile.read(size)
+        if not raw:
+            return {}
+        try:
+            return json.loads(raw.decode("utf-8"))
+        except json.JSONDecodeError:
+            return {}
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Fourth Down Labs terminal server")
+    parser.add_argument("--host", default="127.0.0.1", help="Host to bind")
+    parser.add_argument("--port", default=8000, type=int, help="Port to bind")
+    parser.add_argument(
+        "--sync-on-start",
+        action="store_true",
+        help="Run live data sync before serving requests",
+    )
+    parser.add_argument(
+        "--season",
+        type=int,
+        default=live_data.current_nfl_season(),
+        help="NFL season for initial sync",
+    )
+    return parser.parse_args()
+
+
+def env_is_truthy(name, default=False):
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def run_sync_task(season=None):
+    with live_data.get_connection() as connection:
+        summary = live_data.run_full_sync(connection, season=season, include_nflverse=True)
+    print(
+        "Background sync complete: "
+        f"players={summary.get('players_upserted', 0)} "
+        f"stats={summary.get('stats_rows_upserted', 0)} "
+        f"metrics={summary.get('metrics_rows_upserted', 0)}"
+    )
+
+
+def main():
+    args = parse_args()
+    sync_on_start_env = env_is_truthy("FDL_AUTO_SYNC_ON_START", default=False)
+    sync_blocking_env = env_is_truthy("FDL_SYNC_BLOCKING", default=False)
+    season_env = os.getenv("FDL_SYNC_SEASON")
+    sync_season = int(season_env) if season_env and str(season_env).isdigit() else args.season
+
+    with live_data.get_connection() as connection:
+        live_data.initialize_database(connection)
+        if args.sync_on_start and not sync_on_start_env:
+            summary = live_data.run_full_sync(connection, season=args.season, include_nflverse=True)
+            print(f"Initial sync complete: players={summary['players_upserted']} stats={summary['stats_rows_upserted']}")
+
+    handler = partial(TerminalRequestHandler)
+    server = ThreadingHTTPServer((args.host, args.port), handler)
+    print(f"Serving Fourth Down Labs terminal on http://{args.host}:{args.port}")
+
+    if sync_on_start_env:
+        if sync_blocking_env:
+            print("Running startup sync in blocking mode...")
+            run_sync_task(season=sync_season)
+        else:
+            print("Starting background startup sync thread...")
+            thread = threading.Thread(target=run_sync_task, kwargs={"season": sync_season}, daemon=True)
+            thread.start()
+
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+
+
+if __name__ == "__main__":
+    main()

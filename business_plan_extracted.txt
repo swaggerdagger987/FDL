@@ -1,0 +1,971 @@
+PageCount: 24
+
+===== Page 1 =====
+FOURTH DOWN LABS
+The Fantasy Football Terminal
+Business Plan & System Design
+Solo Founder Edition — Rebuilt from First Principles
+Founder: Soham
+Version 2.0 • February 2026
+CONFIDENTIAL
+What Changed From v1
+This plan is rebuilt from scratch for a solo founder operating with limited capital, no full-time
+engineering team, and a need to reach revenue within 90 days. Every architectural decision has
+been stress-tested against the question: can one person build, ship, and maintain this?
+
+===== Page 2 =====
+Fourth Down Labs • Business Plan v2.0
+PART I
+The Honest Assessment
+1. What Changed and Why It Matters
+The original Fourth Down Labs vision was designed for a four-person founding team. That team
+no longer exists. Soham is now the sole founder.
+This is not a minor staffing adjustment. It fundamentally changes what can be built, how fast it
+can ship, and what the product should even try to be. The original system design called for six
+architectural layers, four product modules, three database technologies, Monte Carlo
+simulations, an AI chatbot, a creator marketplace, and a React Native mobile app. That plan
+assumed 15–20 engineering person-months of work. A solo founder with no external funding
+cannot execute that plan on any reasonable timeline.
+This document does not scale down the original vision. It replaces it with a new plan designed
+from the ground up for the constraints that actually exist. The core market thesis remains strong.
+The execution strategy is entirely different.
+The Hard Truth
+A solo founder building a data-intensive analytics platform is competing against FantasyPros (200+
+employees, VC-funded), Fantasy Points (established team, $200+/yr data product), and a sea of free
+tools that are good enough for most users. Trying to out-feature these platforms is a losing strategy.
+The only viable path is to be radically focused: do one thing so well that word of mouth becomes the
+primary growth engine.
+2. What Survived the Reassessment
+Not everything from the original vision was wrong. Several core insights remain valid and form
+the foundation of this rebuilt plan:
+• The analogy is strong: The financial analogy is a powerful branding and UX
+framework. Treating players as assets, trades as M&A, and the waiver wire as arbitrage
+is a genuinely differentiated positioning in a market where every competitor uses the
+same generic sports analytics language.
+• The trade gap is real: No competitor offers transparent, portfolio-aware trade analysis.
+Every trade calculator on the market either (a) adds up opaque player values and
+declares a winner, or (b) is free but extremely basic. Nobody shows you how a trade
+changes your team’s risk profile, championship odds, or bye-week exposure. This is a
+real gap.
+• The market is proven: The prosumer segment exists and spends money. The
+IBISWorld data shows a $10.3B fantasy sports market growing at 2.45% CAGR through
+2030. Fantasy Points charges $200/yr for their data suite and has a viable business.
+Page 2
+
+===== Page 3 =====
+Fourth Down Labs • Business Plan v2.0
+Draft Sharks charges $36–$96/season. There is demonstrated willingness to pay for
+analytical edges.
+• The data edge is available: Advanced metrics are an unsaturated differentiator. Most
+competitors (FantasyPros, Footballguys) offer basic stats. Only Fantasy Points offers
+deep advanced data, and they have no trade analyzer or league sync. There is a clear
+opportunity to combine advanced analytics with actionable tools.
+3. What Got Cut and Why
+Original Feature Verdict Reasoning
+Creator Marketplace Cut entirely Phase 4 feature that requires a large user base to
+function. A classic chicken-and-egg problem. Revisit
+only if the platform reaches 50,000+ active users.
+Live Draft Assistant Deferred to Year
+Real-time draft sync requires platform-specific
+2
+integrations, websocket infrastructure, and handling
+live-game latency. High complexity, used only during a
+2–3 week draft window per year.
+Dynasty Valuator (DCF
+Simplified to
+The full DCF-style valuation engine requires extensive
+model)
+Phase 2
+backtesting and model validation. A simpler age-
+adjusted value model ships first.
+Monte Carlo
+Deferred to
+Computationally expensive and requires validated
+Championship Sim
+Phase 2
+projection distributions. The trade analyzer works
+without it initially by using point-estimate projections
+with confidence intervals.
+Mobile App (React
+Cut for launch Mobile web (responsive) is sufficient initially. A native
+Native)
+app is a maintenance burden for a solo developer and
+requires App Store approval cycles.
+Yahoo/ESPN League
+Deferred to
+Sleeper’s public API is zero-friction and covers the
+Sync
+Phase 2
+most engaged fantasy demographic. Yahoo and ESPN
+integrations require OAuth flows and are less stable.
+AI Chatbot (LLM-
+Replaced with
+A full conversational AI requires RAG infrastructure,
+powered)
+AI-assisted
+prompt engineering, and ongoing monitoring. An
+search
+intelligent search bar that understands natural
+language queries delivers 80% of the value at 20% of
+the complexity.
+Three database
+Consolidated to
+PostgreSQL handles everything needed at this scale.
+technologies
+one
+Adding Redis and ClickHouse creates operational
+burden with no benefit until you have thousands of
+concurrent users.
+Page 3
+
+===== Page 4 =====
+Fourth Down Labs • Business Plan v2.0
+PART II
+The Business Plan
+4. The One-Sentence Pitch
+Fourth Down Labs
+The only fantasy football trade analyzer that shows you how a deal changes your championship
+odds, not just your roster’s raw value — powered by the advanced metrics the free tools don’t have.
+That is the entire product for launch. Not a terminal. Not a platform. Not a marketplace. A single
+tool that does one thing better than anything else on the market: analyze fantasy football trades
+with institutional-grade rigor. Everything else — the screener, the dynasty valuator, the draft
+assistant — is built later, only after this core product has proven product-market fit and
+generated revenue.
+5. Target Customer
+The target customer is not "all fantasy football players." It is a specific, identifiable segment:
+Attribute Profile
+Identity The “commissioner” archetype: the person in their league who runs the
+league, proposes the most trades, and spends 5–10+ hours per week on
+fantasy football
+Demographics Male, 25–40, college-educated, household income $60K+, tech-comfortable
+League Type Plays in 2–4 leagues, at least one dynasty or keeper league, total league
+dues of $100–$1,000+/year
+Current Behavior Uses FantasyPros for rankings, FantasyCalc or KTC for trade values, Reddit
+(r/fantasyfootball, r/DynastyFF) for discussion, and 2–3 podcasts for analysis
+Pain Point Spends significant time aggregating information from 4–6 different free tools
+before making a trade decision, still feels uncertain about whether the trade
+actually improves their team
+Willingness to Pay Already pays for one fantasy subscription ($48–$200/yr) or would pay if
+convinced the tool delivers measurable value
+Platform Predominantly Sleeper users (skew younger, more engaged, dynasty-heavy)
+— this is why Sleeper sync is the priority integration
+6. Market Sizing
+Page 4
+
+===== Page 5 =====
+Fourth Down Labs • Business Plan v2.0
+The fantasy sports services industry in the US generated approximately $10.3 billion in revenue
+in 2024, with projected growth to $11.9 billion by 2030 (2.45% CAGR, per IBISWorld). However,
+this total includes daily fantasy (DraftKings, FanDuel) which represents roughly 40.6% of the
+market. The season-long fantasy segment is approximately 45% of the market, or ~$4.6 billion.
+Within season-long fantasy, the addressable market for analytics and tools platforms (as
+opposed to hosting platforms like Yahoo, ESPN, Sleeper) is a fraction of this. Based on
+competitor pricing and estimated user bases:
+Segment Estimate Source
+Total US fantasy sports market (2024) $10.3 billion IBISWorld
+Season-long fantasy segment (~45%) ~$4.6 billion IBISWorld product segmentation
+Analytics/tools TAM (estimated) $200M–$500M Sum of competitor revenues +
+unmonetized demand
+Prosumer segment willing to pay $50–
+2–5 million users Based on 40M+ total fantasy
+$200/yr
+players, ~5–12% prosumer
+Fourth Down Labs Year 1 target 2,000–5,000 paid
+subscribers
+Conservative: $120K–$400K ARR
+at $60–80/yr avg
+Why This Is Achievable
+2,000 paid subscribers at $5/month ($60/year) = $120,000 ARR. Draft Sharks charges $36–$96 per
+season. If the trade analyzer is demonstrably better than free alternatives and earns word-of-mouth
+in dynasty communities, 2,000 subscribers within 12 months of launch is a realistic target for a
+focused product.
+7. Revenue Model
+Tier Price What’s Included Conversion Target
+Free $0 Basic trade analyzer: input two sides of
+100% of users
+a trade, get a value comparison with
+player projections. Limited to standard
+scoring. No league sync.
+Pro $5.99/mo or
+Full trade analysis with portfolio impact
+5–10% of free users
+$59.99/yr
+(accretion/dilution, volatility, bye-week
+modeling, roster fit score). Sleeper
+league sync. Advanced metric access.
+Unlimited trade analyses. Player
+comparison tool.
+Dynasty+ $9.99/mo or
+Everything in Pro plus dynasty asset
+2–4% of free users
+$89.99/yr
+valuations, draft pick pricing, rest-of-
+Page 5
+
+===== Page 6 =====
+Fourth Down Labs • Business Plan v2.0
+Tier Price What’s Included Conversion Target
+season projections, player research
+reports, screener with custom queries,
+export to CSV.
+Year 1 Financial Target: $120K–$300K ARR from 2,000–4,000 paid subscribers across Pro
+and Dynasty+ tiers. Break-even on infrastructure costs by month 6. The free tier is the
+acquisition engine; conversion happens when users realize the free tool’s trade analysis is
+surface-level compared to what Pro reveals about their specific roster.
+Page 6
+
+===== Page 7 =====
+Fourth Down Labs • Business Plan v2.0
+PART III
+System Design
+8. Architecture: Designed for One
+The system architecture is designed around a single constraint that overrides all others: one
+person must be able to build it, ship it, debug it at 2 AM when something breaks, and still have
+time to do customer support and marketing. Every technology choice is evaluated against this
+constraint.
+The Solo Founder Architecture Test
+For every component: (1) Can I set it up in under a day? (2) Can I debug it without a team? (3) Does
+it have managed/hosted options so I’m not running infrastructure? (4) Is there a simpler alternative
+that gets 80% of the result? If any answer is no, the component is replaced or deferred.
+8.1 Technology Stack
+Component Choice Why This, Not That
+Frontend Next.js (React) —
+Server-side rendering for SEO, API routes built-in
+deployed on Vercel
+(no separate backend for simple endpoints), Vercel
+deployment is zero-config. Responsive web serves
+as the mobile experience.
+Backend / API Next.js API routes +
+Next.js handles auth, user management, and simple
+Python FastAPI
+CRUD. A single Python FastAPI service handles all
+microservice
+analytics (xFP calculations, trade analysis,
+valuations). Two services total, not twelve.
+Database PostgreSQL (hosted on
+One database for everything. Supabase provides
+Supabase or Railway)
+auth, real-time subscriptions, and a REST API out of
+the box. No Redis, no ClickHouse, no operational
+burden.
+ETL / Data
+Python scripts + cron jobs
+nflverse data updates weekly during the season. A
+Pipeline
+(or GitHub Actions)
+Python script that runs on a schedule is infinitely
+simpler than Airflow. Upgrade to managed
+orchestration only when pipeline complexity
+demands it.
+ML / Analytics Python (scikit-learn,
+OLS regression for xFP models. No PyTorch, no
+pandas, NumPy)
+model serving infrastructure. The models run as part
+of the weekly ETL job and write results to
+PostgreSQL.
+Auth & Payments Supabase Auth + Stripe Supabase handles user management, sessions, and
+row-level security. Stripe handles subscriptions with
+minimal code.
+Page 7
+
+===== Page 8 =====
+Fourth Down Labs • Business Plan v2.0
+Component Choice Why This, Not That
+Hosting Vercel (frontend) +
+Managed platforms with generous free tiers. No
+Railway or Fly.io (Python
+AWS console, no Kubernetes, no Docker
+API)
+orchestration.
+Monitoring Sentry (errors) + Vercel
+Analytics (traffic)
+Free tiers are sufficient. Upgrade to Datadog only
+when revenue justifies it.
+What Is Deliberately NOT Here
+No Redis. No ClickHouse. No Apache Airflow. No Kubernetes. No React Native. No WebSocket
+infrastructure. No separate microservices for each module. Each of these is a valid technology for a
+funded team, but each one is also a maintenance surface that a solo founder must monitor, debug,
+and upgrade alone. They can all be added later if needed.
+8.2 System Architecture Diagram (Logical)
+Layer Components Data Flow
+Data Ingestion Python ETL scripts pulling from nflverse
+Raw data → cleaned/validated →
+(R packages via rpy2 or pre-exported
+PostgreSQL
+CSV), odds APIs, and Sleeper public API
+Master Database PostgreSQL: players, weekly_stats,
+Single source of truth for all
+advanced_metrics, teams, schedules,
+downstream consumers
+projections, valuations, league_rosters
+Analytics Engine Python module: xFP calculation (OLS
+Reads from Master DB → writes
+models per position), FPOE derivation,
+projections and valuations back to
+DSM matchup adjustments, dynasty
+DB
+valuation (age-adjusted DCF-lite)
+Trade Analyzer Python module: takes two roster sides +
+Reads projections + league data →
+scoring format, queries projections,
+returns JSON analysis to API
+computes accretion/dilution, volatility
+delta, bye-week impact, roster fit score
+API Layer Next.js API routes (auth, user CRUD,
+Frontend ↔ API ↔ Database
+league sync) + FastAPI (analytics, trade
+analysis, screener queries)
+Frontend Next.js React app: Trade Analyzer UI,
+User interaction → API calls →
+Player Dashboard, Screener, League
+rendered results
+Import flow
+9. Data Foundation
+9.1 Master Player Database
+Page 8
+
+===== Page 9 =====
+Fourth Down Labs • Business Plan v2.0
+The database schema is intentionally flat and practical. No over-normalized relational maze.
+The goal is to make every query that the Trade Analyzer or Screener needs answerable with a
+single JOIN or less.
+Table Key Columns Rows (approx) Updated
+players id, name, position, team, age,
+~2,500 (active
+Weekly
+nfl_experience, draft_round,
+roster)
+draft_year, sleeper_id
+weekly_stats player_id, season, week, pass_yds,
+~40,000/season Post-game
+pass_td, rush_att, rush_yds, rush_td,
+targets, receptions, rec_yds, rec_td,
+fumbles, snap_pct
+advanced_metrics player_id, season, week, yprr, adot,
+~40,000/season Post-game
+target_share, air_yards_share,
+(calculated)
+yac_above_exp, epa_per_target, mtf,
+stuff_rate, opportunity_share,
+route_share, rz_targets, rz_carries
+projections player_id, season, week, xfp_weekly,
+~2,500/week Weekly (model
+xfp_ros, dsm_adjustment,
+output)
+fpoe_season, volatility_score, ceiling,
+floor
+valuations player_id, season, dynasty_value,
+~2,500 Weekly
+market_value, value_gap,
+trend_direction, age_curve_discount
+teams id, name, abbreviation, bye_week,
+32 Preseason
+division, conference
+schedules season, week, home_team,
+~272/season Weekly (odds
+away_team, vegas_spread,
+update)
+over_under, implied_home_total,
+implied_away_total
+defense_vs_position team_id, season, week, position,
+fantasy_points_allowed, rank,
+~2,000/season Post-game
+dsm_factor
+user_leagues user_id, platform, league_id,
+Per user On sync
+scoring_format, roster_settings,
+synced_at
+user_rosters user_id, league_id, player_id,
+Per user On sync
+roster_slot
+9.2 ETL Pipeline (Simplified)
+The pipeline runs on three schedules. There is no Airflow, no DAG orchestrator. These are
+Python scripts triggered by cron jobs or GitHub Actions.
+Page 9
+
+===== Page 10 =====
+Fourth Down Labs • Business Plan v2.0
+Job Trigger What It Does Runtime
+weekly_stats_etl.py Post-game Tuesday
+Pulls game logs from nflverse,
+~10 minutes
+AM
+validates, loads into weekly_stats
+and advanced_metrics tables
+projections_update.py After weekly_stats_etl
+Runs xFP models (OLS) for all
+~5 minutes
+completes
+positions, calculates DSM
+adjustments, writes to projections
+table
+valuations_update.py After
+Runs dynasty valuation model,
+~5 minutes
+projections_update
+updates market values from
+completes
+scraped sources, calculates
+value gaps
+odds_update.py Daily during season
+Pulls Vegas lines, implied totals,
+~2 minutes
+(6 AM)
+and updates the schedules table
+sleeper_sync.py On user request (API
+Pulls user’s league rosters,
+~3
+trigger)
+scoring settings, and standings
+seconds/league
+from Sleeper public API
+Total weekly compute time: approximately 25 minutes. This runs comfortably on a single
+Railway or Fly.io container. There is no need for parallel workers, message queues, or
+distributed computing at this scale.
+9.3 Data Sources
+Source Data Cost Access Method
+nflverse
+Play-by-play, game logs,
+Free (open
+R packages or pre-
+(nflreadr/nflfastR)
+rosters, snap counts, Next Gen
+source)
+exported CSV from
+Stats aggregates
+GitHub releases
+Sleeper API League rosters, scoring
+Free (public API) REST API, no
+settings, standings, player IDs
+authentication
+required
+Odds API (or similar) Vegas spreads, over/unders,
+implied totals
+$0–$50/month REST API with key
+FantasyCalc (scraped) Crowdsourced trade values
+Free Web scraping or
+(market value reference)
+manual CSV import
+(respect ToS)
+Pro Football Reference Historical stats for model
+Free Manual download for
+training
+backtesting
+Page 10
+
+===== Page 11 =====
+Fourth Down Labs • Business Plan v2.0
+Total Data Cost: $0–$50/month
+The entire data foundation runs on free, open-source data. This is a critical advantage for a
+bootstrapped solo founder. Paid data sources (PFF grades, NGS tracking data) can be added later
+when revenue supports it, but the MVP does not depend on them.
+Page 11
+
+===== Page 12 =====
+Fourth Down Labs • Business Plan v2.0
+10. The Analytics Engine
+10.1 Expected Fantasy Points (xFP) Models
+The xFP models are position-specific OLS regressions trained on 3 seasons of historical data.
+They are intentionally simple: linear regression is interpretable, fast to train, and easy to debug.
+More sophisticated ML models (gradient boosting, neural networks) are a future optimization,
+not a launch requirement.
+Wide Receivers
+Formula: xFP(w) = C0 + C1(TPG) + C2(YPRR) + C3(aDOT) + C4(FD/TGT%) +
+C5(RZTGTS/G)
+Matchup-Adjusted: Projected FP = xFP(w) × DSM(opponent), where DSM = 1 +
+DAF(opponent)
+Variables: Targets Per Game (volume), Yards Per Route Run (efficiency), Average Depth of
+Target (role), First Down Per Target % (high-leverage efficiency), Red Zone Targets Per Game
+(scoring volume). Coefficients determined via OLS, retrained start-of-season and before the
+trade deadline.
+Running Backs
+Key Principle: For RBs, opportunity is king. A target is worth 2.5–3.0x a carry in PPR formats.
+The RB model weights rushing attempts, targets (or route share), red zone carries, red zone
+targets, routes run per game, and high-leverage snap share. It explicitly models the difference
+between a bellcow back (high opportunity, moderate efficiency) and a pass-catching specialist
+(lower volume, higher per-touch value).
+Identity: Actual FP = xFP (opportunity) + FPOE (skill/luck). This decomposition is the core
+insight users care about: is this player producing because he’s good, or because he’s getting
+fed volume?
+Tight Ends and Quarterbacks
+TE model: Hybrid of WR and RB frameworks, weighted heavily toward route share and red zone
+usage. QB model: Adjusted completion %, aDOT, rushing contribution, situational context
+(Vegas implied totals, opponent pass defense DVOA). QB projections are the least
+differentiated part of the product since QB value is more predictable; the real alpha is in
+WR/RB/TE analysis.
+10.2 Opponent Defensive Strength Multiplier (DSM)
+The DSM adjusts a player’s baseline xFP for the specific defense they face that week. It is
+calculated per-position: a defense that shuts down WRs may be vulnerable to RBs, and vice
+versa. The Defensive Adjustment Factor (DAF) measures how many fantasy points above or
+below league average a defense allows to each position, normalized by strength of opposing
+Page 12
+
+===== Page 13 =====
+Fourth Down Labs • Business Plan v2.0
+offenses faced. DSM = 1 + DAF. A DSM of 1.08 means the defense allows 8% more fantasy
+points than average to that position; 0.93 means 7% fewer.
+10.3 Dynasty Valuation (Simplified for Launch)
+The full DCF-style dynasty model from the original plan is deferred. For launch, dynasty values
+are calculated using a simpler but effective approach:
+• Base value: Rest-of-season xFP projection, weighted by league scoring format
+• Age adjustment: Position-specific multiplier based on empirical aging curves (RBs
+decline fastest, WRs peak later, TEs have longest windows)
+• Trend adjustment: 3-season weighted FPOE trend (ascending players get a premium,
+declining players get a discount)
+• Market comparison: Value gap between the calculated intrinsic value and FantasyCalc’s
+crowdsourced market value, flagging buy-low/sell-high opportunities
+This simplified model captures 80% of the value of the full DCF approach while being buildable
+in days rather than months. The full DCF model (with injury-adjusted discount rates and
+contract-situation factors) is a Phase 2 upgrade.
+Page 13
+
+===== Page 14 =====
+Fourth Down Labs • Business Plan v2.0
+11. The Product: Trade Analyzer
+This is the only product that matters at launch. Everything else is built on top of it. The trade
+analyzer must be best-in-class on day one or the platform fails.
+11.1 How It Works (User Flow)
+Step User Action System Response
+1 User lands on
+Clean input interface: “Team A gives” and “Team B gives”
+fourthdownlabs.com → Trade
+with player search autocomplete
+Analyzer
+2 User adds players to each side
+Real-time value bar updates showing raw value
+of the trade
+comparison (this is the free tier output)
+3 Free user sees: basic value
+Teaser: “Unlock full analysis: How does this trade affect
+comparison + player projections
+your championship odds?” → paywall
+4 (Pro) User syncs their Sleeper
+System imports full roster, league scoring, standings, and
+league
+opponent rosters
+5 (Pro) System runs full portfolio
+Returns the full trade report (see 11.2 below)
+analysis
+11.2 The Trade Report (Pro Output)
+When a Pro subscriber analyzes a trade, they receive a structured report with six sections. This
+is the product’s core value proposition and the primary reason users convert from free to paid:
+Section What It Shows Why It Matters
+Value Summary xFP-based value of each side, adjusted
+The baseline: who “wins” the trade on
+for league scoring format. Net value
+raw value (what every free tool shows,
+delta.
+but using better projections)
+Accretion /
+Projected change in the user’s weekly
+Answers: “Does this trade make my
+Dilution
+starting lineup points (ceiling and floor)
+starting lineup better or worse?”
+accounting for who you’d actually start
+Volatility Analysis Boom/bust profile of acquired vs. traded
+Answers: “Am I trading a safe floor for
+players. Change in roster’s overall risk
+a volatile ceiling?” Assigns high-
+profile.
+beta/low-beta labels.
+Bye Week
+Identifies weeks where the trade
+Answers: “Will I have a dead week 7
+Impact
+creates or resolves bye-week conflicts
+because three of my starters are on
+in the starting lineup
+bye after this trade?”
+Page 14
+
+===== Page 15 =====
+Fourth Down Labs • Business Plan v2.0
+Section What It Shows Why It Matters
+Roster Fit Score Composite metric: positional need filled,
+Answers: “Does this player actually
+positional depth created/lost, starter vs.
+help my team, or am I just trading value
+bench impact
+for value?”
+Verdict Overall trade grade (A through F) with a
+The “close the deal” summary the user
+one-paragraph natural language
+screenshots and sends to their league
+explanation
+groupchat
+The Screenshot Test
+The Verdict section is designed to pass the “screenshot test”: a user should want to screenshot the
+trade grade and send it to their league group chat. This is the primary organic growth mechanism.
+Every shared screenshot is free marketing for Fourth Down Labs.
+11.3 Free vs. Pro: The Conversion Trigger
+The free trade analyzer provides enough value to get users in the door, but it is intentionally
+limited in ways that create natural upgrade pressure:
+Feature Free Pro
+Player value comparison ✓ ✓
+xFP-based projections Current week only Full season (ROS)
+League scoring adjustment Standard/PPR only Any custom format
+Accretion/Dilution analysis ✗ (teaser shown) ✓
+Volatility analysis ✗ ✓
+Bye week impact ✗ ✓
+Roster fit score ✗ (requires league sync) ✓
+Trade grade + verdict Basic (A–F only) Full grade + written
+explanation
+Sleeper league sync ✗ ✓
+Trades per day 3 Unlimited
+Page 15
+
+===== Page 16 =====
+Fourth Down Labs • Business Plan v2.0
+12. Phase 2 Products (Post-Revenue)
+These products are built only after the Trade Analyzer is live, has paying subscribers, and has
+validated product-market fit. They are listed here for roadmap clarity, not as launch
+commitments.
+12.1 The Market Screener
+A multi-factor player screening tool that lets users query the entire player database using any
+combination of standard and proprietary metrics. The Capital IQ screener equivalent. Users
+build complex filters (e.g., “All WRs under 26 with target share > 22% and aDOT > 12”) and
+save them as watchlists with optional alerts. The data infrastructure for this already exists in the
+Master Player Database; the Screener is primarily a frontend and query layer.
+12.2 Dynasty Valuator (Full)
+Upgrade from the simplified age-adjusted model to the full DCF-style valuation engine. Adds
+draft pick pricing (as options contracts with moneyness based on team performance), historical
+value charts, and automated Player Research Reports with buy/sell/hold ratings. The Monte
+Carlo championship simulation is added here to power the Trade Terminal’s championship
+equity delta feature.
+12.3 AI-Assisted Analysis
+Evolution from intelligent search to a conversational AI that can answer natural language
+questions (“Should I trade Breece Hall for Ja’Marr Chase?”) using RAG grounded in the Master
+Player Database. Phase 1 delivers 80% of this value through a smart search bar that
+understands player names, metric requests, and comparison queries without requiring a full
+LLM pipeline.
+12.4 Live Draft Assistant
+The most complex product module, requiring real-time websocket connections to draft
+platforms, sub-second value recalculation, and opponent modeling. Deferred until the data
+infrastructure and projection models are battle-tested from a full season of Trade Analyzer
+usage. Expected timeline: ready for the 2027 draft season.
+Page 16
+
+===== Page 17 =====
+Fourth Down Labs • Business Plan v2.0
+PART IV
+Execution Plan
+13. 90-Day Launch Roadmap
+The roadmap is designed for a single person working full-time. Every milestone is a shippable
+increment. If the project gets delayed, the most recently completed milestone is still a viable
+product.
+Week Phase Deliverable Ship Milestone
+1–2 Data
+Set up PostgreSQL on Supabase. Write
+Internal: database
+Foundation
+weekly_stats_etl.py to pull nflverse data. Load
+with 3 seasons of
+2022–2024 seasons. Build the players,
+historical data
+weekly_stats, and teams tables.
+queryable
+3–4 Advanced
+Write advanced_metrics_etl.py: calculate YPRR,
+Internal: advanced
+Metrics
+aDOT, target share, opportunity share, snap
+metrics available for
+metrics, red zone usage for all players. Populate
+all players
+advanced_metrics table.
+5–6 xFP Models Train OLS regressions for WR, RB, TE, QB using
+Internal: validated
+2022–2023 data. Validate against 2024 actuals.
+xFP model with
+Write projections_update.py. Populate projections
+documented
+table.
+accuracy
+7–8 Trade Analyzer
+Build the trade analysis engine in Python: value
+Internal: trade
+(Backend)
+comparison, accretion/dilution calculation,
+analysis API returns
+volatility scoring, bye-week impact, roster fit logic.
+correct JSON for test
+Expose via FastAPI.
+trades
+9–10 Trade Analyzer
+Build the Next.js web app: player search, trade
+EXTERNAL
+(Frontend)
+input UI, free-tier results display, Pro-tier full
+LAUNCH: Free trade
+report display, paywall gate. Deploy to Vercel.
+analyzer is live on
+the web
+11–12 Monetization +
+Integrate Stripe subscriptions. Build Sleeper
+REVENUE: Pro
+League Sync
+league sync flow. Enable roster-aware analysis for
+subscriptions are live
+Pro subscribers. Add user auth via Supabase.
+and Sleeper sync
+works
+The Key Insight: Ship the Free Tool at Week 10
+The free trade analyzer launches before monetization is built. This is deliberate. The first 2–4 weeks
+of the free tool being live are for collecting user feedback, fixing bugs, and building word of mouth.
+Monetization goes live at week 12 after the product has been validated by real users.
+14. Post-Launch Growth Plan (Months 4–12)
+Page 17
+
+===== Page 18 =====
+Fourth Down Labs • Business Plan v2.0
+Month Focus Key Actions
+4–5 Iterate on Trade
+Respond to user feedback. Add scoring format support (TE
+Analyzer
+premium, superflex, IDP). Improve the trade grade algorithm
+based on user satisfaction data. Add player comparison page.
+6–7 Build the Screener
+Deploy multi-factor player screener. This reuses existing
+(Phase 2)
+database and metrics. Primarily a frontend build. Add to Pro
+tier.
+8–9 Dynasty Valuator
+Launch simplified dynasty valuations. Add draft pick pricing.
+(Phase 2)
+Market vs. intrinsic value gaps. Add to Dynasty+ tier.
+10–12 Content & Growth Launch a weekly newsletter analyzing trade market trends
+using platform data. Guest appearances on fantasy podcasts
+(leverage the data for credibility). SEO optimization for trade-
+related search queries.
+15. Go-to-Market Strategy
+With no marketing budget and no team, growth must be organic. The strategy focuses on three
+channels where a solo founder with a superior product can compete:
+15.1 Reddit and Discord (Community-Led)
+The dynasty fantasy community lives on Reddit (r/DynastyFF, r/fantasyfootball) and Sleeper’s
+Discord servers. These communities are highly engaged, skeptical of marketing, and responsive
+to genuinely useful tools. The strategy is not to spam links. It is to become a valuable
+community member who happens to have built a tool:
+• Post original analytical content using Fourth Down Labs data (e.g., “I analyzed every WR
+trade from the last 3 months. Here’s which side won based on rest-of-season
+production.”)
+• Answer trade questions with screenshots of the tool’s output, showing the analysis
+framework
+• Run weekly “Ask me to analyze your trade” threads during the season
+• Offer Pro access to subreddit moderators and community leaders
+15.2 SEO (Search-Driven)
+Fantasy football trades generate enormous search volume during the season. Target long-tail
+keywords that existing competitors underserve:
+• Player-specific trade queries: “Should I trade [Player A] for [Player B] fantasy football”
+• Trade value queries: “What is [Player] worth in fantasy football trade”
+• Format-specific queries: “Dynasty trade analyzer PPR”, “Superflex trade calculator”
+Page 18
+
+===== Page 19 =====
+Fourth Down Labs • Business Plan v2.0
+Each of these queries maps directly to the trade analyzer. The free tool serves as the SEO
+landing page; conversion to Pro happens after the user sees the value of the analysis.
+15.3 The Screenshot Effect (Viral)
+The trade report’s Verdict section is designed to be screenshotted and shared. When a user
+shares their trade grade in a group chat, the Fourth Down Labs brand is visible to 10–12
+league-mates, each of whom is a potential user. This is the lowest-cost, highest-leverage
+growth channel available. It requires no marketing spend — only a product good enough that
+people want to share it.
+Page 19
+
+===== Page 20 =====
+Fourth Down Labs • Business Plan v2.0
+16. Financial Model (Year 1)
+Category Monthly Cost Annual Cost Notes
+Supabase (PostgreSQL +
+$25 $300 Pro plan; free tier works for
+Auth)
+development
+Vercel (Frontend hosting) $20 $240 Pro plan; handles traffic
+spikes during draft season
+Railway or Fly.io (Python
+$20–$50 $240–$600 Scales with usage; minimal
+API)
+during offseason
+Odds API $0–$50 $0–$600 Free tier may suffice initially
+Domain + email $15 $180 Custom domain + Google
+Workspace
+Stripe fees 2.9% + $0.30/txn ~$500–$1,200 On subscription revenue
+Sentry (error monitoring) $0 $0 Free tier
+Total Infrastructure $80–$160/mo $960–$1,920/yr
+Revenue
+Subscribers Avg Revenue/Sub Annual Revenue Net Profit
+Scenario
+Conservative 1,500 $65/yr $97,500 $95,580–$96,540
+Base Case 3,000 $70/yr $210,000 $208,080–
+$209,040
+Optimistic 5,000 $75/yr $375,000 $373,080–
+$374,040
+Infrastructure costs are nearly irrelevant compared to potential revenue. The business breaks
+even on infrastructure with approximately 15–20 paid subscribers. The real cost is Soham’s
+time. At the base case scenario of $210K ARR, Fourth Down Labs is a sustainable one-person
+business that funds its own growth.
+Page 20
+
+===== Page 21 =====
+Fourth Down Labs • Business Plan v2.0
+17. Risks and Mitigations
+Risk Severity Probability Mitigation
+xFP model
+Critical Medium Backtest against 3 full seasons before launch. Publish
+underperforms
+model accuracy metrics transparently. Users trust a model
+(inaccurate
+that admits its error rate more than one that claims
+projections)
+perfection.
+Free trade
+Critical Medium The free tier must provide enough value to hook users; the
+tools are “good
+Pro analysis must reveal something genuinely surprising
+enough” (no
+about their roster that they couldn’t see with free tools. If
+conversion)
+conversion is below 3% after 3 months, redesign the
+paywall.
+Solo founder
+High High Automate everything possible before the season starts.
+burnout
+The ETL pipeline, projections, and valuations should run
+(especially
+without human intervention. Reserve manual effort for
+during NFL
+customer support and bug fixes.
+season)
+Sleeper API
+Medium Low Abstract the Sleeper integration behind an adapter pattern.
+changes or
+Cache league data aggressively. Sleeper has been stable
+rate limits
+and developer-friendly historically.
+Competitor
+Medium Medium–
+Speed is the defense. Ship first, build brand loyalty, and
+copies the
+High
+iterate faster than a large company can. The data
+portfolio-aware
+infrastructure and model accuracy create a compounding
+trade analysis
+advantage over time.
+nflverse data
+Medium Low Validate every data point on ingestion. Maintain manual
+quality issues
+override capability for known issues. nflverse is maintained
+by a dedicated open-source community with high quality
+standards.
+Seasonal
+Medium High Plan for it financially. The dynasty community is active
+revenue
+year-round, which provides baseline revenue. Offseason
+concentration
+features (dynasty valuations, draft prep) sustain
+engagement.
+Page 21
+
+===== Page 22 =====
+Fourth Down Labs • Business Plan v2.0
+18. Success Metrics
+These are the metrics that matter for a solo-founder bootstrapped product. Vanity metrics (total
+signups, page views) are tracked but do not drive decisions.
+Metric Target (Month 3) Target (Month 6) Target (Month 12)
+Free users (registered) 5,000 15,000 40,000
+Paid subscribers 200 1,000 3,000
+Free → Pro conversion rate 3% 5% 7%
+Monthly recurring revenue
+$1,200 $6,000 $18,000
+(MRR)
+Trade analyses run (total) 50,000 300,000 1,000,000
+Net Promoter Score (NPS) >40 >50 >60
+Organic search traffic
+5,000 25,000 75,000
+(monthly)
+Churn rate (monthly) <8% <6% <5%
+Page 22
+
+===== Page 23 =====
+Fourth Down Labs • Business Plan v2.0
+PART V
+The Path Forward
+19. What This Plan Is (and Isn’t)
+This plan is not a scaled-down version of the original Capital IQ vision. It is a fundamentally
+different approach designed for a fundamentally different situation. The original plan assumed a
+team, assumed funding, and assumed the ability to build multiple products simultaneously. This
+plan assumes none of those things.
+What this plan does assume: that Soham can write code, that the fantasy football prosumer
+market exists and is willing to pay for demonstrably better tools, that the trade analyzer is the
+highest-leverage entry point into that market, and that word of mouth in tight-knit fantasy
+communities can drive growth without a marketing budget.
+The Capital IQ vision is not abandoned. It is the destination. But the route to get there is one
+product at a time, each one proving its value before the next is built. The trade analyzer is the
+beachhead. The screener extends the territory. The dynasty valuator and draft assistant
+complete the terminal. The creator marketplace is the endgame.
+But none of that matters if the trade analyzer isn’t great. So that’s what gets built first.
+20. Soham’s 14-Day Sprint Plan
+The following is the concrete, actionable plan for the next two weeks. No architecture diagrams.
+No theoretical frameworks. Just tasks.
+Day Task Done When
+1 Set up Supabase project. Create PostgreSQL tables: players,
+Can query empty tables via
+teams, weekly_stats
+Supabase dashboard
+2 Write weekly_stats_etl.py: download nflverse 2024 data,
+SELECT * FROM
+parse, load into weekly_stats
+weekly_stats WHERE
+season=2024 returns data
+3 Load 2022 and 2023 historical data. Verify completeness. 3 full seasons of weekly stats
+in the database
+4 Write advanced_metrics_etl.py: calculate YPRR, aDOT,
+advanced_metrics table
+target_share, opportunity_share, RZ metrics
+populated for all 3 seasons
+5 Train WR xFP model: OLS regression on 2022–2023, validate
+Model coefficients saved.
+on 2024. Document R² and MAE.
+Accuracy documented.
+Page 23
+
+===== Page 24 =====
+Fourth Down Labs • Business Plan v2.0
+Day Task Done When
+6 Train RB xFP model (same process). Begin TE model. Two validated models with
+documented accuracy
+7 Finish TE + QB models. Write projections_update.py to
+projections table populated
+generate weekly projections.
+with 2024 Week 1–18
+projections
+8 Build trade analysis engine (Python): value comparison,
+Function accepts two player
+accretion/dilution logic
+lists, returns analysis JSON
+9 Add volatility scoring and bye-week impact to trade engine Full trade report JSON output
+for test trades
+10 Set up Next.js project on Vercel. Build player search
+Can input a trade in the
+autocomplete + trade input UI
+browser, see console log of
+API call
+11 Build free-tier trade results page: value bar, basic projections End-to-end: input trade in
+browser → see value
+comparison
+12 Build Pro-tier trade report page: full 6-section analysis with
+Can toggle between free and
+paywall gate
+Pro views
+13 Deploy full stack. Test end-to-end. Fix bugs. Live at fourthdownlabs.com,
+functional for test trades
+14 Share in r/DynastyFF and r/fantasyfootball for feedback. Begin
+First external users running
+user acquisition.
+trades on the platform
+Build the trade analyzer. Ship it. Listen. Iterate. Everything else comes after.
+— End of Document —
+Page 24
+

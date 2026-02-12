@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Screener | Fourth Down Labs</title>
+    <meta
+      name="description"
+      content="Screen all NFL players with live stats and configurable filters inside the Fourth Down Labs terminal."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="ambient-backdrop" aria-hidden="true"></div>
+    <header class="site-header">
+      <a class="brand" href="./index.html">
+        <span class="brand-dot"></span>
+        Fourth Down Labs
+      </a>
+      <nav class="main-nav" aria-label="Primary">
+        <a class="nav-link" href="./index.html">Home</a>
+        <a class="nav-link" href="./mission.html">Mission</a>
+        <a class="nav-link" href="./modules.html">Modules</a>
+        <a class="nav-link active" href="./screener.html">Screener</a>
+        <a class="nav-link" href="./pricing.html">Pricing</a>
+        <a class="nav-link" href="./roadmap.html">Roadmap</a>
+      </nav>
+      <a class="nav-cta" href="./terminal.html">Open Terminal</a>
+    </header>
+
+    <main class="site-shell">
+      <section class="hero-panel fade-in">
+        <p class="eyebrow">LIVE PLAYER SCREENER</p>
+        <h1>Filter every NFL player with live database-backed stats.</h1>
+        <p class="subhead">
+          This screener pulls from the local terminal database populated by live sources.
+        </p>
+      </section>
+
+      <section class="panel">
+        <h2>Base Filters</h2>
+        <div class="control-grid">
+          <label>
+            Search
+            <input id="screen-search" placeholder="Player name..." />
+          </label>
+          <label>
+            Position
+            <select id="screen-position">
+              <option value="">All</option>
+              <option value="QB">QB</option>
+              <option value="RB">RB</option>
+              <option value="WR">WR</option>
+              <option value="TE">TE</option>
+              <option value="K">K</option>
+            </select>
+          </label>
+          <label>
+            Team
+            <select id="screen-team">
+              <option value="">All Teams</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Metric Screener</h2>
+        <p class="hint">Select any metrics from the scrollable list and stack as many filters as you need.</p>
+        <div class="screener-builder">
+          <div class="metric-catalog-panel">
+            <label>
+              Find Metric
+              <input id="metric-search" placeholder="Type: age, yac, air yards..." />
+            </label>
+            <label>
+              Available Metrics
+              <select id="metric-select" class="metric-select" size="14" aria-label="Available metrics"></select>
+            </label>
+            <div class="metric-select-actions">
+              <button id="screen-add-metric" class="secondary-btn" type="button">Add Selected</button>
+            </div>
+            <label>
+              Custom Metric Key
+              <input id="screen-custom-metric" placeholder="Example: receiving_yards_after_catch" />
+            </label>
+            <div class="metric-select-actions">
+              <button id="screen-add-custom-metric" class="secondary-btn" type="button">Add Custom Metric</button>
+            </div>
+          </div>
+          <div class="active-filters-panel">
+            <div class="active-filters-head">
+              <h3>Active Filters</h3>
+              <button id="screen-clear-filters" class="secondary-btn" type="button">Clear</button>
+            </div>
+            <div id="screen-active-filters" class="active-filters"></div>
+          </div>
+        </div>
+        <div class="filter-actions">
+          <button id="screen-run" class="primary-btn" type="button">Run Screen</button>
+          <button id="screen-refresh-db" class="secondary-btn" type="button">Refresh Live DB</button>
+        </div>
+        <p id="screen-status" class="status" data-level="info">Ready. Run a screen to load results.</p>
+      </section>
+
+      <section class="panel">
+        <h2>Results</h2>
+        <p id="screen-count" class="hint">0 players</p>
+        <div class="table-wrap">
+          <table>
+            <thead id="screen-results-head"></thead>
+            <tbody id="screen-results"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./screener.js"></script>
+  </body>
+</html>
