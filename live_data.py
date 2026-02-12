@@ -6,6 +6,7 @@ import json
 import math
 import re
 import sqlite3
+import threading
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -24,6 +25,7 @@ NFLVERSE_RELEASES_URL = "https://api.github.com/repos/nflverse/nflverse-data/rel
 USER_AGENT = "FourthDownLabsTerminal/1.0 (+https://fourthdownlabs.local)"
 NFL_REGULAR_SEASON_WEEKS = 18
 MAX_SCREEN_FILTERS = 24
+DB_SCHEMA_LOCK = threading.Lock()
 
 SLEEPER_METRIC_ALIASES = {
     "pts_ppr": "fantasy_points_ppr",
@@ -222,13 +224,14 @@ def fetch_bytes(url, timeout=90):
 
 def get_connection():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(DB_PATH)
+    connection = sqlite3.connect(DB_PATH, timeout=60)
     connection.row_factory = sqlite3.Row
     return connection
 
 
 def initialize_database(connection):
-    connection.executescript(
+    with DB_SCHEMA_LOCK:
+        connection.executescript(
         """
         PRAGMA journal_mode=WAL;
         PRAGMA foreign_keys=ON;
@@ -317,8 +320,7 @@ def initialize_database(connection):
           updated_at TEXT NOT NULL
         );
 
-        DROP VIEW IF EXISTS player_latest_stats;
-        CREATE VIEW player_latest_stats AS
+        CREATE VIEW IF NOT EXISTS player_latest_stats AS
         WITH ranked AS (
           SELECT
             pws.*,
@@ -330,8 +332,8 @@ def initialize_database(connection):
         )
         SELECT * FROM ranked WHERE rn = 1;
         """
-    )
-    connection.commit()
+        )
+        connection.commit()
 
 
 def upsert_sync_state(connection, key, value):
