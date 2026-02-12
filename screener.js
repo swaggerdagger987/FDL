@@ -396,9 +396,15 @@ async function refreshDatabase() {
     setStatus("Refreshing live database...", "info");
     dom.refreshBtn.disabled = true;
     const response = await fetch(`/api/admin/sync?season=${season}`, { method: "POST" });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!response.ok && response.status !== 202) throw new Error(`HTTP ${response.status}`);
 
     const payload = await response.json();
+    if (response.status === 202 || payload.queued) {
+      setStatus("Sync started in background. This can take a few minutes on first run.", "info");
+      await waitForSyncToFinish();
+      return;
+    }
+
     const summary = payload.summary || {};
     setStatus(
       `DB refreshed: players ${summary.players_upserted || 0}, stats ${summary.stats_rows_upserted || 0}, metrics ${
@@ -416,6 +422,41 @@ async function refreshDatabase() {
   } finally {
     dom.refreshBtn.disabled = false;
   }
+}
+
+async function waitForSyncToFinish() {
+  const startedAt = Date.now();
+  const maxMs = 6 * 60 * 1000;
+
+  while (Date.now() - startedAt < maxMs) {
+    await sleep(3000);
+    const response = await fetch("/api/admin/sync/status");
+    if (!response.ok) continue;
+    const payload = await response.json();
+    const status = payload.status || {};
+    if (status.running) {
+      setStatus("Sync in progress... building live stats database.", "info");
+      continue;
+    }
+    if (status.last_error) {
+      setStatus(`Sync failed: ${status.last_error}`, "error");
+      return;
+    }
+    const summary = status.last_summary || {};
+    setStatus(
+      `DB refreshed: players ${summary.players_upserted || 0}, stats ${summary.stats_rows_upserted || 0}, metrics ${
+        summary.metrics_rows_upserted || 0
+      }.`,
+      "success"
+    );
+    await Promise.all([loadTeamOptions(), loadMetricOptions()]);
+    renderMetricOptions();
+    renderActiveFilters();
+    await runScreen();
+    return;
+  }
+
+  setStatus("Sync still running in background. Refresh again in a minute.", "info");
 }
 
 function resolveMetricValue(item, metrics, key) {
@@ -541,6 +582,12 @@ function toNumberOrNull(value) {
 function currentSleeperSeason(now = new Date()) {
   const year = now.getFullYear();
   return now.getMonth() + 1 >= 8 ? year : year - 1;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 function escapeHtml(value) {

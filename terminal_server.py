@@ -11,6 +11,15 @@ from urllib.parse import parse_qs, urlparse
 import live_data
 
 BASE_DIR = Path(__file__).resolve().parent
+SYNC_STATE_LOCK = threading.Lock()
+SYNC_STATE = {
+    "running": False,
+    "season": None,
+    "last_started_at": None,
+    "last_finished_at": None,
+    "last_summary": None,
+    "last_error": None,
+}
 
 
 def first(query, key, default=None):
@@ -18,6 +27,48 @@ def first(query, key, default=None):
     if not values:
         return default
     return values[0]
+
+
+def sync_snapshot():
+    with SYNC_STATE_LOCK:
+        return dict(SYNC_STATE)
+
+
+def should_async_admin_sync(query):
+    mode = str(first(query, "mode", "auto")).strip().lower()
+    if mode in {"sync", "blocking"}:
+        return False
+    if mode in {"async", "background"}:
+        return True
+    return env_is_truthy("FDL_ADMIN_SYNC_ASYNC", default=False)
+
+
+def start_background_sync(season):
+    with SYNC_STATE_LOCK:
+        if SYNC_STATE["running"]:
+            return False
+        SYNC_STATE["running"] = True
+        SYNC_STATE["season"] = int(season)
+        SYNC_STATE["last_started_at"] = live_data.utc_now_iso()
+        SYNC_STATE["last_error"] = None
+
+    def _runner():
+        try:
+            summary = run_sync_task(season=season)
+            with SYNC_STATE_LOCK:
+                SYNC_STATE["last_summary"] = summary
+                SYNC_STATE["last_error"] = None
+        except Exception as error:  # noqa: BLE001
+            with SYNC_STATE_LOCK:
+                SYNC_STATE["last_error"] = str(error)
+        finally:
+            with SYNC_STATE_LOCK:
+                SYNC_STATE["running"] = False
+                SYNC_STATE["last_finished_at"] = live_data.utc_now_iso()
+
+    thread = threading.Thread(target=_runner, daemon=True)
+    thread.start()
+    return True
 
 
 class TerminalRequestHandler(SimpleHTTPRequestHandler):
@@ -49,6 +100,10 @@ class TerminalRequestHandler(SimpleHTTPRequestHandler):
                 if parsed.path == "/api/health" and method == "GET":
                     payload = live_data.fetch_health_summary(connection)
                     self.send_json(200, payload)
+                    return
+
+                if parsed.path == "/api/admin/sync/status" and method == "GET":
+                    self.send_json(200, {"ok": True, "status": sync_snapshot()})
                     return
 
                 if parsed.path == "/api/filter-options" and method == "GET":
@@ -119,8 +174,24 @@ class TerminalRequestHandler(SimpleHTTPRequestHandler):
 
                 if parsed.path == "/api/admin/sync" and method in {"GET", "POST"}:
                     season = first(query, "season", live_data.current_nfl_season())
+                    if should_async_admin_sync(query):
+                        started = start_background_sync(season=season)
+                        payload = {
+                            "ok": True,
+                            "queued": started,
+                            "status": sync_snapshot(),
+                        }
+                        if not started:
+                            payload["note"] = "A sync job is already running."
+                        self.send_json(202, payload)
+                        return
+
                     summary = live_data.run_full_sync(connection, season=season, include_nflverse=True)
-                    self.send_json(200, {"ok": True, "summary": summary})
+                    with SYNC_STATE_LOCK:
+                        SYNC_STATE["last_summary"] = summary
+                        SYNC_STATE["last_error"] = None
+                        SYNC_STATE["last_finished_at"] = live_data.utc_now_iso()
+                    self.send_json(200, {"ok": True, "summary": summary, "status": sync_snapshot()})
                     return
 
             self.send_json(404, {"error": f"Unknown endpoint: {parsed.path}"})
@@ -204,6 +275,7 @@ def run_sync_task(season=None):
         f"stats={summary.get('stats_rows_upserted', 0)} "
         f"metrics={summary.get('metrics_rows_upserted', 0)}"
     )
+    return summary
 
 
 def main():

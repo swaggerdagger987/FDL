@@ -13,3 +13,5 @@ services:
         value: "1"
       - key: FDL_SYNC_BLOCKING
         value: "0"
+      - key: FDL_ADMIN_SYNC_ASYNC
+        value: "1"

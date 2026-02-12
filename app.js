@@ -1013,10 +1013,15 @@ async function handleRefreshLiveDatabase() {
     }
     setStatus("Refreshing live database from sources...", "info");
     const response = await fetch(`/api/admin/sync?season=${season}`);
-    if (!response.ok) {
+    if (!response.ok && response.status !== 202) {
       throw new Error(`HTTP ${response.status}`);
     }
     const payload = await response.json();
+    if (response.status === 202 || payload.queued) {
+      setStatus("Sync started in background. This can take a few minutes on first run.", "info");
+      await waitForSyncToFinishInTerminal();
+      return;
+    }
     const summary = payload.summary || {};
     await probeDatabaseConnection();
     await loadCatalogFromDatabase();
@@ -1032,6 +1037,37 @@ async function handleRefreshLiveDatabase() {
       dom.refreshDataBtn.textContent = "Refresh Live DB";
     }
   }
+}
+
+async function waitForSyncToFinishInTerminal() {
+  const startedAt = Date.now();
+  const maxMs = 6 * 60 * 1000;
+
+  while (Date.now() - startedAt < maxMs) {
+    await pause(3000);
+    const response = await fetch("/api/admin/sync/status");
+    if (!response.ok) continue;
+    const payload = await response.json();
+    const status = payload.status || {};
+    if (status.running) {
+      setStatus("Sync in progress... building live stats database.", "info");
+      continue;
+    }
+    if (status.last_error) {
+      setStatus(`Live database sync failed: ${status.last_error}`, "error");
+      return;
+    }
+    const summary = status.last_summary || {};
+    await probeDatabaseConnection();
+    await loadCatalogFromDatabase();
+    setStatus(
+      `Live database refreshed: ${summary.players_upserted || 0} players, ${summary.stats_rows_upserted || 0} stat rows.`,
+      "success"
+    );
+    return;
+  }
+
+  setStatus("Sync still running in background. Try refresh again shortly.", "info");
 }
 
 function handleAnalyzeTrade() {
@@ -1817,4 +1853,10 @@ function round(value, digits = 2) {
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
+}
+
+function pause(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
