@@ -1178,7 +1178,19 @@ def fetch_screener_query(connection, payload):
 
     search = str(payload.get("search") or "").strip().lower()
     position = str(payload.get("position") or "").strip().upper()
+    raw_positions = payload.get("positions")
+    positions = []
+    if isinstance(raw_positions, str):
+        positions = [item.strip().upper() for item in raw_positions.split(",") if item and str(item).strip()]
+    elif isinstance(raw_positions, (list, tuple, set)):
+        positions = [str(item).strip().upper() for item in raw_positions if item and str(item).strip()]
+    if not positions and position:
+        positions = [position]
+    positions = [item for item in positions if item]
+
     team = str(payload.get("team") or "").strip().upper()
+    age_min = parse_float(payload.get("age_min"))
+    age_max = parse_float(payload.get("age_max"))
     limit = max(1, min(parse_int(payload.get("limit"), 200), 1000))
     offset = max(0, parse_int(payload.get("offset"), 0))
     filters = normalize_screen_filters(payload.get("filters"))
@@ -1212,12 +1224,19 @@ def fetch_screener_query(connection, payload):
         where_parts.append("(LOWER(p.full_name) LIKE ? OR LOWER(p.first_name) LIKE ? OR LOWER(p.last_name) LIKE ?)")
         wildcard = f"%{search}%"
         where_params.extend([wildcard, wildcard, wildcard])
-    if position:
-        where_parts.append("p.position = ?")
-        where_params.append(position)
+    if positions:
+        placeholders = ", ".join(["?"] * len(positions))
+        where_parts.append(f"p.position IN ({placeholders})")
+        where_params.extend(positions)
     if team:
         where_parts.append("p.team = ?")
         where_params.append(team)
+    if age_min is not None:
+        where_parts.append("p.age >= ?")
+        where_params.append(age_min)
+    if age_max is not None:
+        where_parts.append("p.age <= ?")
+        where_params.append(age_max)
 
     sql = f"""
       SELECT
