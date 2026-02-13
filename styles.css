@@ -275,19 +275,83 @@ h3 {
   padding: 1.16rem 0 2.2rem;
 }
 
-.site-shell > *,
-.layout > * {
+.site-shell > section,
+.layout > section {
   transform-origin: center top;
 }
 
-.site-shell > *:nth-child(2n + 1),
-.layout > *:nth-child(2n + 1) {
+.site-shell > section:nth-of-type(2n + 1),
+.layout > section:nth-of-type(2n + 1) {
   transform: rotate(-0.46deg);
 }
 
-.site-shell > *:nth-child(2n),
-.layout > *:nth-child(2n) {
+.site-shell > section:nth-of-type(2n),
+.layout > section:nth-of-type(2n) {
   transform: rotate(0.58deg);
+}
+
+.hand-divider {
+  position: relative;
+  height: 20px;
+  margin: -0.08rem 0 0.06rem;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.hand-divider::before {
+  content: "";
+  position: absolute;
+  left: clamp(12px, 2.5vw, 34px);
+  right: clamp(88px, 16vw, 200px);
+  top: 10px;
+  height: 0;
+  border-top: 3px dashed rgba(247, 244, 232, 0.76);
+  border-radius: 999px;
+  transform: rotate(-1.8deg);
+  opacity: 0.92;
+}
+
+.hand-divider::after {
+  content: "";
+  position: absolute;
+  right: clamp(10px, 4vw, 44px);
+  top: 2px;
+  width: 58px;
+  height: 15px;
+  border-radius: 9px 4px 8px 5px;
+  border: 1px dashed rgba(39, 52, 40, 0.42);
+  background:
+    linear-gradient(95deg, rgba(247, 230, 106, 0.72), rgba(154, 215, 244, 0.55));
+  transform: rotate(4.5deg);
+  opacity: 0.88;
+}
+
+.site-shell .hand-divider:nth-of-type(2n)::before,
+.layout .hand-divider:nth-of-type(2n)::before {
+  transform: rotate(1.35deg);
+}
+
+.site-shell .hand-divider:nth-of-type(3n)::after,
+.layout .hand-divider:nth-of-type(3n)::after {
+  background:
+    linear-gradient(95deg, rgba(244, 175, 194, 0.74), rgba(247, 230, 106, 0.58));
+  transform: rotate(-4.4deg);
+}
+
+.site-shell > .data-panel,
+.layout > .data-panel {
+  transform: none !important;
+}
+
+.data-panel .table-wrap,
+.data-panel table,
+.data-panel th,
+.data-panel td {
+  transform: none;
+}
+
+.data-panel table {
+  font-size: 0.92rem;
 }
 
 .layout {
@@ -1313,8 +1377,9 @@ button:disabled,
   }
 
   .topbar,
-  .site-shell > *,
-  .layout > *,
+  .site-shell > section,
+  .layout > section,
+  .hand-divider,
   .nav-link,
   .metric-card,
   .feature-card,
@@ -1355,6 +1420,22 @@ button:disabled,
 
   .trade-builder {
     grid-template-columns: 1fr;
+  }
+
+  .hand-divider {
+    height: 16px;
+    margin: 0.02rem 0;
+  }
+
+  .hand-divider::before {
+    right: 78px;
+    border-top-width: 2px;
+  }
+
+  .hand-divider::after {
+    right: 8px;
+    width: 48px;
+    height: 12px;
   }
 }
 
@@ -1438,5 +1519,9 @@ button:disabled,
 
   table {
     min-width: 520px;
+  }
+
+  .hand-divider {
+    display: none;
   }
 }
