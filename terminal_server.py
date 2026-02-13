@@ -12,6 +12,7 @@ import live_data
 
 BASE_DIR = Path(__file__).resolve().parent
 SYNC_STATE_LOCK = threading.Lock()
+SYNC_THREAD = None
 SYNC_STATE = {
     "running": False,
     "season": None,
@@ -30,7 +31,12 @@ def first(query, key, default=None):
 
 
 def sync_snapshot():
+    global SYNC_THREAD
     with SYNC_STATE_LOCK:
+        if SYNC_STATE["running"] and (SYNC_THREAD is None or not SYNC_THREAD.is_alive()):
+            SYNC_STATE["running"] = False
+            if not SYNC_STATE["last_finished_at"]:
+                SYNC_STATE["last_finished_at"] = live_data.utc_now_iso()
         return dict(SYNC_STATE)
 
 
@@ -44,6 +50,7 @@ def should_async_admin_sync(query):
 
 
 def start_background_sync(season):
+    global SYNC_THREAD
     with SYNC_STATE_LOCK:
         if SYNC_STATE["running"]:
             return False
@@ -66,8 +73,8 @@ def start_background_sync(season):
                 SYNC_STATE["running"] = False
                 SYNC_STATE["last_finished_at"] = live_data.utc_now_iso()
 
-    thread = threading.Thread(target=_runner, daemon=True)
-    thread.start()
+    SYNC_THREAD = threading.Thread(target=_runner, daemon=True)
+    SYNC_THREAD.start()
     return True
 
 
@@ -103,7 +110,13 @@ class TerminalRequestHandler(SimpleHTTPRequestHandler):
                     return
 
                 if parsed.path == "/api/admin/sync/status" and method == "GET":
-                    self.send_json(200, {"ok": True, "status": sync_snapshot()})
+                    status_payload = sync_snapshot()
+                    health_payload = live_data.fetch_health_summary(connection)
+                    if health_payload.get("last_sync_report") and not status_payload.get("last_summary"):
+                        status_payload["last_summary"] = health_payload.get("last_sync_report")
+                    if health_payload.get("last_sync_at"):
+                        status_payload["db_last_sync_at"] = health_payload.get("last_sync_at")
+                    self.send_json(200, {"ok": True, "status": status_payload})
                     return
 
                 if parsed.path == "/api/filter-options" and method == "GET":
