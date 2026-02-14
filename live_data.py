@@ -7,8 +7,10 @@ import math
 import re
 import sqlite3
 import threading
+import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -24,6 +26,9 @@ SLEEPER_STATS_ENDPOINTS = [
     "https://api.sleeper.com/stats/nfl/{season}/{week}?season_type=regular",
 ]
 NFLVERSE_RELEASES_URL = "https://api.github.com/repos/nflverse/nflverse-data/releases?per_page=100"
+SLEEPER_WEEK_FETCH_TIMEOUT_SECONDS = 15
+NFLVERSE_ASSET_CACHE_TTL_SECONDS = 24 * 60 * 60
+NFLVERSE_ASSET_CACHE_KEY_PREFIX = "nflverse_player_stats_asset"
 
 USER_AGENT = "FourthDownLabsTerminal/1.0 (+https://fourthdownlabs.local)"
 NFL_REGULAR_SEASON_WEEKS = 18
@@ -243,7 +248,7 @@ def load_sleeper_players_cache():
         return None
     try:
         payload = json.loads(SLEEPER_PLAYERS_CACHE_PATH.read_text(encoding="utf-8"))
-    except Exception:  # noqa: BLE001
+    except (OSError, json.JSONDecodeError):
         return None
 
     players = payload.get("players")
@@ -295,7 +300,14 @@ def fetch_sleeper_players_cached(force_refresh=False, max_age_seconds=SLEEPER_PL
                 "fetched_at": timestamp,
                 "count": len(players),
             }
-        except Exception as error:  # noqa: BLE001
+        except (
+            OSError,
+            ValueError,
+            RuntimeError,
+            json.JSONDecodeError,
+            TimeoutError,
+            urllib.error.URLError,
+        ) as error:
             if cached:
                 fetched_at = cached.get("fetched_at")
                 return cached["players"], {
@@ -474,6 +486,19 @@ def upsert_sync_state(connection, key, value):
     connection.commit()
 
 
+def read_sync_state(connection, key):
+    row = connection.execute(
+        "SELECT value, updated_at FROM sync_state WHERE key = ?",
+        (key,),
+    ).fetchone()
+    if not row:
+        return None
+    return {
+        "value": row["value"],
+        "updated_at": parse_iso_timestamp(row["updated_at"]),
+    }
+
+
 def upsert_player_week_metrics(connection, rows):
     if not rows:
         return 0
@@ -526,12 +551,10 @@ def upsert_player_week_stats(connection, rows):
 
 def refresh_latest_metrics(connection):
     now = utc_now_iso()
-    connection.execute("DELETE FROM player_latest_metrics")
+    connection.execute("DROP TABLE IF EXISTS latest_metric_snapshot")
     connection.execute(
         """
-        INSERT INTO player_latest_metrics (
-          player_id, stat_key, stat_value, season, week, source, updated_at
-        )
+        CREATE TEMP TABLE latest_metric_snapshot AS
         WITH ranked AS (
           SELECT
             pwm.player_id,
@@ -546,11 +569,39 @@ def refresh_latest_metrics(connection):
             ) AS rn
           FROM player_week_metrics pwm
         )
-        SELECT player_id, stat_key, stat_value, season, week, source, ?
+        SELECT player_id, stat_key, stat_value, season, week, source
         FROM ranked
         WHERE rn = 1
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO player_latest_metrics (
+          player_id, stat_key, stat_value, season, week, source, updated_at
+        )
+        SELECT player_id, stat_key, stat_value, season, week, source, ?
+        FROM latest_metric_snapshot
+        WHERE 1=1
+        ON CONFLICT(player_id, stat_key) DO UPDATE SET
+          stat_value=excluded.stat_value,
+          season=excluded.season,
+          week=excluded.week,
+          source=excluded.source,
+          updated_at=excluded.updated_at
         """,
         (now,),
+    )
+    connection.execute(
+        """
+        DELETE FROM player_latest_metrics
+        WHERE source != 'players'
+          AND NOT EXISTS (
+            SELECT 1
+            FROM latest_metric_snapshot snapshot
+            WHERE snapshot.player_id = player_latest_metrics.player_id
+              AND snapshot.stat_key = player_latest_metrics.stat_key
+          )
+        """
     )
     connection.execute(
         """
@@ -587,6 +638,7 @@ def refresh_latest_metrics(connection):
         (now,),
     )
     upsert_profile_metrics_from_players(connection, updated_at=now)
+    connection.execute("DROP TABLE IF EXISTS latest_metric_snapshot")
     connection.commit()
 
 
@@ -741,18 +793,36 @@ def sync_sleeper_players(connection):
 
 
 def fetch_sleeper_week_data(season, week):
-    last_error = None
-    for template in SLEEPER_STATS_ENDPOINTS:
-        url = template.format(season=season, week=week)
-        try:
-            payload = fetch_json(url)
+    urls = [template.format(season=season, week=week) for template in SLEEPER_STATS_ENDPOINTS]
+    errors = []
+
+    with ThreadPoolExecutor(max_workers=len(urls)) as executor:
+        futures = {
+            executor.submit(fetch_json, url, SLEEPER_WEEK_FETCH_TIMEOUT_SECONDS): url
+            for url in urls
+        }
+        for future in as_completed(futures):
+            url = futures[future]
+            try:
+                payload = future.result()
+            except (
+                OSError,
+                ValueError,
+                json.JSONDecodeError,
+                TimeoutError,
+                urllib.error.URLError,
+            ) as error:
+                errors.append(f"{url}: {error}")
+                continue
             if isinstance(payload, dict):
+                for pending in futures:
+                    if pending is not future:
+                        pending.cancel()
                 return payload
-        except Exception as error:  # noqa: BLE001
-            last_error = error
-            continue
-    if last_error:
-        raise last_error
+            errors.append(f"{url}: unexpected payload type")
+
+    if errors:
+        raise RuntimeError("; ".join(errors))
     return {}
 
 
@@ -765,7 +835,14 @@ def sync_sleeper_weekly_stats(connection, season):
     for week in range(1, NFL_REGULAR_SEASON_WEEKS + 1):
         try:
             payload = fetch_sleeper_week_data(season, week)
-        except Exception:  # noqa: BLE001
+        except (
+            OSError,
+            ValueError,
+            RuntimeError,
+            json.JSONDecodeError,
+            TimeoutError,
+            urllib.error.URLError,
+        ):
             continue
 
         if not payload:
@@ -842,7 +919,26 @@ def parse_year_from_name(name):
     return None
 
 
-def find_nflverse_player_stats_asset(season=None):
+def nflverse_asset_cache_key(season=None):
+    season_part = int(season) if season else "latest"
+    return f"{NFLVERSE_ASSET_CACHE_KEY_PREFIX}:{season_part}"
+
+
+def find_nflverse_player_stats_asset(connection, season=None):
+    initialize_database(connection)
+    cache_key = nflverse_asset_cache_key(season=season)
+    cached = read_sync_state(connection, cache_key)
+    if cached:
+        updated_at = cached.get("updated_at")
+        age_seconds = (dt.datetime.utcnow() - updated_at).total_seconds() if updated_at else None
+        if age_seconds is not None and age_seconds <= NFLVERSE_ASSET_CACHE_TTL_SECONDS:
+            try:
+                payload = json.loads(cached.get("value") or "{}")
+                if payload and payload.get("url"):
+                    return payload
+            except json.JSONDecodeError:
+                pass
+
     releases = fetch_json(NFLVERSE_RELEASES_URL)
     season = int(season) if season else None
     candidates = []
@@ -880,7 +976,9 @@ def find_nflverse_player_stats_asset(season=None):
 
     if candidates:
         candidates.sort(key=lambda item: item["score"], reverse=True)
-        return candidates[0]
+        best = candidates[0]
+        upsert_sync_state(connection, cache_key, json.dumps(best))
+        return best
     return None
 
 
@@ -902,7 +1000,7 @@ def build_player_lookup_maps(connection):
 
 
 def sync_nflverse_player_stats(connection, season):
-    asset = find_nflverse_player_stats_asset(season=season)
+    asset = find_nflverse_player_stats_asset(connection, season=season)
     if not asset:
         return {"stats_rows_upserted": 0, "asset": None, "note": "No nflverse player_stats asset found"}
 
@@ -1194,20 +1292,6 @@ def build_filter_sql(alias, metric_filter):
     return f"{alias}.stat_value >= ?", [value]
 
 
-def build_filter_exists_sql(metric_filter):
-    filter_sql, filter_params = build_filter_sql("mf", metric_filter)
-    exists_sql = f"""
-      EXISTS (
-        SELECT 1
-        FROM player_latest_metrics mf
-        WHERE mf.player_id = p.player_id
-          AND mf.stat_key = ?
-          AND {filter_sql}
-      )
-    """
-    return exists_sql, [metric_filter["key"], *filter_params]
-
-
 def dedupe_metric_keys(keys):
     seen = set()
     deduped = []
@@ -1226,28 +1310,6 @@ def build_requested_metric_keys(raw_columns, filters):
     if isinstance(raw_columns, list):
         keys.extend(raw_columns)
     return dedupe_metric_keys(keys)[:80]
-
-
-def fetch_metric_values(connection, player_ids, metric_keys):
-    if not player_ids or not metric_keys:
-        return {}
-
-    player_placeholders = ",".join(["?"] * len(player_ids))
-    metric_placeholders = ",".join(["?"] * len(metric_keys))
-    rows = connection.execute(
-        f"""
-        SELECT player_id, stat_key, stat_value
-        FROM player_latest_metrics
-        WHERE player_id IN ({player_placeholders})
-          AND stat_key IN ({metric_placeholders})
-        """,
-        [*player_ids, *metric_keys],
-    ).fetchall()
-
-    values = {player_id: {} for player_id in player_ids}
-    for row in rows:
-        values.setdefault(row["player_id"], {})[row["stat_key"]] = row["stat_value"]
-    return values
 
 
 def fetch_filter_options(connection, query):
@@ -1346,11 +1408,21 @@ def fetch_screener_query(connection, payload):
 
     where_params = []
     where_parts = ["1=1"]
+    filter_join_parts = []
+    filter_join_params = []
 
-    for metric_filter in filters:
-        exists_sql, exists_params = build_filter_exists_sql(metric_filter)
-        where_parts.append(exists_sql)
-        where_params.extend(exists_params)
+    for index, metric_filter in enumerate(filters):
+        alias = f"mf{index}"
+        filter_sql, filter_params = build_filter_sql(alias, metric_filter)
+        filter_join_parts.append(
+            f"""
+            JOIN player_latest_metrics {alias}
+              ON {alias}.player_id = p.player_id
+             AND {alias}.stat_key = ?
+             AND {filter_sql}
+            """
+        )
+        filter_join_params.extend([metric_filter["key"], *filter_params])
 
     if search:
         where_parts.append("(LOWER(p.full_name) LIKE ? OR LOWER(p.first_name) LIKE ? OR LOWER(p.last_name) LIKE ?)")
@@ -1370,7 +1442,8 @@ def fetch_screener_query(connection, payload):
         where_parts.append("p.age <= ?")
         where_params.append(age_max)
 
-    select_params = [sort_key or "fantasy_points_ppr", *where_params, limit, offset]
+    from_clause = f"FROM players p {' '.join(filter_join_parts)}"
+    select_params = [*filter_join_params, sort_key or "fantasy_points_ppr", *where_params, limit, offset]
 
     if requested_metric_keys:
         metric_placeholders = ",".join(["?"] * len(requested_metric_keys))
@@ -1386,7 +1459,7 @@ def fetch_screener_query(connection, payload):
               l.receptions AS latest_receptions,
               l.touchdowns AS latest_touchdowns,
               COALESCE(msort.stat_value, COALESCE(l.fantasy_points_ppr, {sort_null_fill})) AS sort_value
-            FROM players p
+            {from_clause}
             LEFT JOIN player_latest_stats l ON l.player_id = p.player_id
             LEFT JOIN player_latest_metrics msort
               ON msort.player_id = p.player_id
@@ -1451,7 +1524,7 @@ def fetch_screener_query(connection, payload):
             l.receiving_yards AS latest_receiving_yards,
             l.receptions AS latest_receptions,
             l.touchdowns AS latest_touchdowns
-          FROM players p
+          {from_clause}
           LEFT JOIN player_latest_stats l ON l.player_id = p.player_id
           LEFT JOIN player_latest_metrics msort
             ON msort.player_id = p.player_id

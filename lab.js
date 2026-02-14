@@ -1,4 +1,5 @@
 import { bindConnectButton, getSleeperSession, hydrateHeader, updateSelectedLeague } from "./site_state.js";
+import { escapeHtml, sleep } from "./utils.js";
 
 const FALLBACK_METRIC_KEYS = [
   "fantasy_points_ppr",
@@ -74,6 +75,9 @@ const METRIC_CATEGORIES = [
 ];
 
 const POSITION_ORDER = ["QB", "RB", "WR", "TE", "K", "PICK"];
+const FILTER_AUTO_RUN_DEBOUNCE_MS = 200;
+
+let autoRunDebounceTimer = null;
 
 const dom = {
   search: document.querySelector("#screen-search"),
@@ -201,7 +205,7 @@ function wireEvents() {
   dom.results.addEventListener("click", onResultsBodyClick);
 
   [dom.search, dom.team, dom.ageMin, dom.ageMax].forEach((element) => {
-    element.addEventListener("change", () => runScreen());
+    element.addEventListener("change", scheduleRunScreen);
   });
 
   dom.search.addEventListener("keydown", (event) => {
@@ -209,6 +213,13 @@ function wireEvents() {
     event.preventDefault();
     runScreen();
   });
+}
+
+function scheduleRunScreen() {
+  clearTimeout(autoRunDebounceTimer);
+  autoRunDebounceTimer = setTimeout(() => {
+    runScreen();
+  }, FILTER_AUTO_RUN_DEBOUNCE_MS);
 }
 
 async function loadTeamOptions() {
@@ -281,7 +292,7 @@ function onPositionPillClick(event) {
   if (!position) {
     state.selectedPositions.clear();
     renderPositionPills();
-    runScreen();
+    scheduleRunScreen();
     return;
   }
 
@@ -292,7 +303,7 @@ function onPositionPillClick(event) {
   }
 
   renderPositionPills();
-  runScreen();
+  scheduleRunScreen();
 }
 
 function renderPositionPills() {
@@ -1560,19 +1571,4 @@ function toNumberOrNull(value) {
 function currentSleeperSeason(now = new Date()) {
   const year = now.getFullYear();
   return now.getMonth() + 1 >= 8 ? year : year - 1;
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&#039;");
 }

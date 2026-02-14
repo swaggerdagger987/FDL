@@ -1,14 +1,29 @@
 import { PLAYERS, PLAYER_MAP, SAMPLE_LEAGUES, STARTER_FORMAT } from "./data.js";
+import {
+  clamp,
+  dedupe,
+  escapeHtml,
+  normalizeToken as normalize,
+  round,
+  signed,
+  sleep
+} from "./utils.js";
+import {
+  buildAdversarialIntelReport,
+  collectSleeperPlayerIdsFromSeasonData,
+  fetchLeagueHistoryChain,
+  fetchLeagueSeasonData
+} from "./intel_engine.js";
 
 const FREE_DAILY_LIMIT = 3;
+const FREE_USAGE_STORAGE_KEY = "fdl_free_usage";
 const BYE_WEEKS = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
 const SLEEPER_API_BASE = "https://api.sleeper.app/v1";
-const SLEEPER_REGULAR_SEASON_WEEKS = 18;
 const CATALOG_WARM_LIMIT = 350;
-const DATALIST_OPTION_LIMIT = 120;
+const DATALIST_OPTION_LIMIT = 30;
 const REMOTE_SUGGESTION_LIMIT = 40;
 const REMOTE_SEARCH_MIN_CHARS = 2;
-const REMOTE_SEARCH_DEBOUNCE_MS = 180;
+const REMOTE_SEARCH_DEBOUNCE_MS = 300;
 
 let suggestionRequestCounter = 0;
 let suggestionDebounceTimer = null;
@@ -36,6 +51,7 @@ const state = {
   catalogMap: { ...PLAYER_MAP },
   playerNameIndex: buildPlayerNameIndex(PLAYERS),
   databaseConnected: false,
+  freeUsage: null,
   analysis: null
 };
 
@@ -94,6 +110,7 @@ initialize();
 
 function initialize() {
   initializeCatalog();
+  hydrateFreeUsage();
   renderPlayerOptions();
   renderLeagueOptions();
   dom.sleeperSeason.value = String(state.sleeperSeason);
@@ -105,6 +122,27 @@ function initialize() {
   renderIntelReport();
   probeDatabaseConnection();
   loadCatalogFromDatabase();
+}
+
+function hydrateFreeUsage() {
+  const today = getTodayIso();
+  const fallback = { date: today, count: 0 };
+
+  try {
+    const parsed = JSON.parse(localStorage.getItem(FREE_USAGE_STORAGE_KEY) || "null");
+    if (!parsed || parsed.date !== today) {
+      state.freeUsage = fallback;
+      localStorage.setItem(FREE_USAGE_STORAGE_KEY, JSON.stringify(fallback));
+      return;
+    }
+    state.freeUsage = {
+      date: today,
+      count: Math.max(0, Number(parsed.count) || 0)
+    };
+  } catch (error) {
+    state.freeUsage = fallback;
+    localStorage.setItem(FREE_USAGE_STORAGE_KEY, JSON.stringify(fallback));
+  }
 }
 
 function wireEvents() {
@@ -295,10 +333,6 @@ function resolvePlayerFromInput(raw) {
     return getCatalogPlayer(directId);
   }
   return state.catalogPlayers.find((player) => normalize(player.name) === normalized) || null;
-}
-
-function normalize(text) {
-  return text.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 function renderTradeLists() {
@@ -529,12 +563,12 @@ async function handleBuildOpponentProfiles() {
   setIntelStatus("Loading league history chain...", "info");
 
   try {
-    const leagueChain = await fetchLeagueHistoryChain(state.syncedLiveLeague, lookback);
+    const leagueChain = await fetchLeagueHistoryChainForTerminal(state.syncedLiveLeague, lookback);
     setIntelStatus("Fetching rosters, users, and transactions across seasons...", "info");
-    const seasonData = await fetchLeagueSeasonData(leagueChain);
+    const seasonData = await fetchLeagueSeasonDataForTerminal(leagueChain);
 
     setIntelStatus("Computing adversarial manager profiles...", "info");
-    const report = await buildAdversarialIntelReport(seasonData, state.syncedOwnerId);
+    const report = await buildTerminalIntelReport(seasonData, state.syncedOwnerId);
     state.intelReport = report;
     renderIntelReport();
     setIntelStatus(
@@ -615,366 +649,23 @@ function renderKpi(label, value) {
   `;
 }
 
-async function fetchLeagueHistoryChain(startLeague, maxSeasons) {
-  const chain = [startLeague];
-  let cursor = startLeague;
-
-  while (chain.length < maxSeasons) {
-    const previousId = cursor?.previous_league_id;
-    if (!previousId) {
-      break;
-    }
-    const prevLeague = await fetchSleeperJSON(`/league/${previousId}`);
-    if (!prevLeague || !prevLeague.league_id) {
-      break;
-    }
-    chain.push(prevLeague);
-    cursor = prevLeague;
-  }
-
-  return chain;
+async function fetchLeagueHistoryChainForTerminal(startLeague, maxSeasons) {
+  return fetchLeagueHistoryChain(startLeague, maxSeasons, fetchSleeperJSON);
 }
 
-async function fetchLeagueSeasonData(leagues) {
-  const out = [];
-
-  for (const league of leagues) {
-    const [users, rosters, transactions] = await Promise.all([
-      fetchSleeperJSON(`/league/${league.league_id}/users`),
-      fetchSleeperJSON(`/league/${league.league_id}/rosters`),
-      fetchAllTransactionsForLeague(league.league_id)
-    ]);
-
-    out.push({
-      league,
-      users: Array.isArray(users) ? users : [],
-      rosters: Array.isArray(rosters) ? rosters : [],
-      transactions
-    });
-  }
-
-  return out;
+async function fetchLeagueSeasonDataForTerminal(leagues) {
+  return fetchLeagueSeasonData(leagues, fetchSleeperJSON, {
+    cacheNamespace: "terminal"
+  });
 }
 
-async function fetchAllTransactionsForLeague(leagueId) {
-  const weeks = Array.from({ length: SLEEPER_REGULAR_SEASON_WEEKS }, (_, index) => index + 1);
-  const perWeek = await Promise.all(
-    weeks.map(async (week) => {
-      try {
-        const weekTransactions = await fetchSleeperJSON(`/league/${leagueId}/transactions/${week}`);
-        if (!Array.isArray(weekTransactions)) return [];
-        return weekTransactions.map((tx) => ({ ...tx, _week: week }));
-      } catch (error) {
-        return [];
-      }
-    })
-  );
-  return perWeek.flat();
-}
-
-async function buildAdversarialIntelReport(seasonData, myUserId) {
+async function buildTerminalIntelReport(seasonData, myUserId) {
   const referencedPlayerIds = collectSleeperPlayerIdsFromSeasonData(seasonData);
   const sleeperPlayersById = await loadSleeperPlayerCatalog(referencedPlayerIds);
-  const managerMap = new Map();
-
-  let totalTransactions = 0;
-  let totalWaivers = 0;
-  let totalTrades = 0;
-  let totalFaabBid = 0;
-
-  for (const season of seasonData) {
-    const ownerByRosterId = {};
-    const displayByUserId = {};
-    const waiverBudget = Number(season.league?.settings?.waiver_budget) || 100;
-
-    for (const user of season.users) {
-      displayByUserId[user.user_id] = user.display_name || user.username || `user-${user.user_id}`;
-    }
-    for (const roster of season.rosters) {
-      ownerByRosterId[roster.roster_id] = roster.owner_id;
-      ensureManager(managerMap, roster.owner_id, displayByUserId[roster.owner_id]);
-    }
-
-    for (const transaction of season.transactions) {
-      if (!isCompletedTransaction(transaction)) continue;
-      totalTransactions += 1;
-
-      const type = transaction.type || "unknown";
-      if (type === "waiver") totalWaivers += 1;
-      if (type === "trade") totalTrades += 1;
-
-      const participantRosterIds = dedupe([
-        ...(Array.isArray(transaction.roster_ids) ? transaction.roster_ids : []),
-        ...(Array.isArray(transaction.consenter_ids) ? transaction.consenter_ids : []),
-        transaction.creator
-      ]).filter((id) => id !== undefined && id !== null);
-
-      const participantUserIds = dedupe(
-        participantRosterIds
-          .map((rosterId) => ownerByRosterId[rosterId] || rosterId)
-          .filter(Boolean)
-      );
-
-      for (const userId of participantUserIds) {
-        const manager = ensureManager(managerMap, userId, displayByUserId[userId]);
-        manager.seasons.add(String(season.league?.season || ""));
-        manager.totalTransactions += 1;
-      }
-
-      if (type === "waiver" || type === "free_agent") {
-        const bid = Number(transaction.settings?.waiver_bid) || 0;
-        if (bid > 0) {
-          totalFaabBid += bid;
-        }
-
-        for (const userId of participantUserIds) {
-          const manager = ensureManager(managerMap, userId, displayByUserId[userId]);
-          manager.waiverCount += 1;
-          if (bid > 0) {
-            manager.faabBidSum += bid;
-            manager.faabBidCount += 1;
-            manager.faabMaxBid = Math.max(manager.faabMaxBid, bid);
-            manager.faabBudgetObserved = Math.max(manager.faabBudgetObserved, waiverBudget);
-          }
-        }
-      }
-
-      if (type === "trade") {
-        for (const userId of participantUserIds) {
-          const manager = ensureManager(managerMap, userId, displayByUserId[userId]);
-          manager.tradeCount += 1;
-          for (const counterpart of participantUserIds) {
-            if (counterpart === userId) continue;
-            manager.counterparties[counterpart] = (manager.counterparties[counterpart] || 0) + 1;
-          }
-        }
-
-        const picks = Array.isArray(transaction.draft_picks) ? transaction.draft_picks : [];
-        for (const pick of picks) {
-          const owner = pick?.owner_id;
-          if (!owner) continue;
-          const manager = ensureManager(managerMap, owner, displayByUserId[owner]);
-          manager.draftPickMoves += 1;
-        }
-      }
-
-      const adds = transaction.adds || {};
-      const drops = transaction.drops || {};
-      applyRosterMoveMetrics(adds, "add", ownerByRosterId, displayByUserId, managerMap, sleeperPlayersById);
-      applyRosterMoveMetrics(drops, "drop", ownerByRosterId, displayByUserId, managerMap, sleeperPlayersById);
-    }
-  }
-
-  const managers = [...managerMap.values()]
-    .map((manager) => finalizeManagerProfile(manager, myUserId))
-    .sort((a, b) => b.aggressionRaw - a.aggressionRaw);
-
-  const maxRaw = Math.max(...managers.map((m) => m.aggressionRaw), 1);
-  for (const manager of managers) {
-    manager.aggressionScore = round((manager.aggressionRaw / maxRaw) * 100, 1);
-  }
-  managers.sort((a, b) => b.aggressionScore - a.aggressionScore);
-
-  return {
-    summary: {
-      seasonsAnalyzed: seasonData.length,
-      leaguesTraversed: seasonData.length,
-      totalTransactions,
-      totalWaivers,
-      totalTrades,
-      totalFaabBid: round(totalFaabBid, 0),
-      managersAnalyzed: managers.length
-    },
-    managers
-  };
-}
-
-function collectSleeperPlayerIdsFromSeasonData(seasonData) {
-  const ids = [];
-  for (const season of seasonData || []) {
-    for (const roster of season.rosters || []) {
-      ids.push(...(roster.players || []), ...(roster.reserve || []), ...(roster.taxi || []));
-    }
-    for (const transaction of season.transactions || []) {
-      ids.push(...Object.keys(transaction.adds || {}), ...Object.keys(transaction.drops || {}));
-    }
-  }
-  return dedupe(ids);
-}
-
-function applyRosterMoveMetrics(moves, mode, ownerByRosterId, displayByUserId, managerMap, sleeperPlayersById) {
-  for (const [sleeperPlayerId, rosterId] of Object.entries(moves || {})) {
-    const ownerId = ownerByRosterId[rosterId];
-    if (!ownerId) continue;
-    const manager = ensureManager(managerMap, ownerId, displayByUserId[ownerId]);
-    if (mode === "add") manager.addCount += 1;
-    if (mode === "drop") manager.dropCount += 1;
-
-    const sleeperPlayer = sleeperPlayersById[sleeperPlayerId];
-    const position = normalizeSleeperPosition(sleeperPlayer?.position);
-    if (position) {
-      if (mode === "add") {
-        manager.positionAdds[position] = (manager.positionAdds[position] || 0) + 1;
-      } else {
-        manager.positionDrops[position] = (manager.positionDrops[position] || 0) + 1;
-      }
-    }
-  }
-}
-
-function normalizeSleeperPosition(position) {
-  const p = String(position || "").toUpperCase();
-  if (["QB", "RB", "WR", "TE"].includes(p)) return p;
-  return "OTHER";
-}
-
-function ensureManager(map, userId, displayName = "") {
-  const key = String(userId || "");
-  if (!key) {
-    return {
-      userId: "",
-      displayName: "Unknown",
-      seasons: new Set(),
-      totalTransactions: 0,
-      waiverCount: 0,
-      tradeCount: 0,
-      faabBidSum: 0,
-      faabBidCount: 0,
-      faabMaxBid: 0,
-      faabBudgetObserved: 100,
-      draftPickMoves: 0,
-      addCount: 0,
-      dropCount: 0,
-      positionAdds: {},
-      positionDrops: {},
-      counterparties: {}
-    };
-  }
-
-  if (!map.has(key)) {
-    map.set(key, {
-      userId: key,
-      displayName: displayName || `Manager ${key.slice(0, 4)}`,
-      seasons: new Set(),
-      totalTransactions: 0,
-      waiverCount: 0,
-      tradeCount: 0,
-      faabBidSum: 0,
-      faabBidCount: 0,
-      faabMaxBid: 0,
-      faabBudgetObserved: 100,
-      draftPickMoves: 0,
-      addCount: 0,
-      dropCount: 0,
-      positionAdds: {},
-      positionDrops: {},
-      counterparties: {}
-    });
-  }
-
-  const manager = map.get(key);
-  if (displayName && !manager.displayName.startsWith("Manager ")) {
-    manager.displayName = displayName;
-  }
-  if (displayName && manager.displayName.startsWith("Manager ")) {
-    manager.displayName = displayName;
-  }
-  return manager;
-}
-
-function finalizeManagerProfile(manager, myUserId) {
-  const avgBid = manager.faabBidCount ? manager.faabBidSum / manager.faabBidCount : 0;
-  const maxBudget = manager.faabBudgetObserved || 100;
-  const avgBidPct = maxBudget ? avgBid / maxBudget : 0;
-  const totalMoves = manager.addCount + manager.dropCount;
-  const counterparties = Object.entries(manager.counterparties).sort((a, b) => b[1] - a[1]);
-
-  const aggressionRaw =
-    manager.tradeCount * 2.4 +
-    manager.waiverCount * 1.1 +
-    manager.draftPickMoves * 1.7 +
-    avgBidPct * 35 +
-    totalMoves * 0.08;
-
-  const topPosition = topKey(manager.positionAdds) || "N/A";
-  const profileLabel = labelFromManagerTraits(manager.tradeCount, avgBidPct, totalMoves);
-  const targetingCue = buildTargetingCue(profileLabel, topPosition, manager.tradeCount);
-  const insight = buildManagerInsight({
-    displayName: manager.displayName,
-    profileLabel,
-    avgBid,
-    maxBudget,
-    topPosition,
-    counterpartyCount: counterparties.length,
-    tradeCount: manager.tradeCount
+  return buildAdversarialIntelReport(seasonData, myUserId, sleeperPlayersById, {
+    profileTone: "terminal",
+    includeTradeTimeline: false
   });
-
-  return {
-    userId: manager.userId,
-    displayName: manager.displayName,
-    isYou: String(manager.userId) === String(myUserId),
-    seasonsCovered: manager.seasons.size,
-    totalTransactions: manager.totalTransactions,
-    waiverCount: manager.waiverCount,
-    tradeCount: manager.tradeCount,
-    avgFaabBid: round(avgBid, 1),
-    maxFaabBid: manager.faabMaxBid,
-    faabBidPct: round(avgBidPct * 100, 1),
-    draftPickMoves: manager.draftPickMoves,
-    addCount: manager.addCount,
-    dropCount: manager.dropCount,
-    topPositionAdds: topPosition,
-    profileLabel,
-    aggressionRaw,
-    aggressionScore: 0,
-    insight,
-    targetingCue,
-    topCounterpartyUserId: counterparties[0]?.[0] || null,
-    topCounterpartyTrades: counterparties[0]?.[1] || 0
-  };
-}
-
-function labelFromManagerTraits(tradeCount, avgBidPct, totalMoves) {
-  if (tradeCount >= 8 && avgBidPct >= 0.18) return "Hyper-aggressive";
-  if (tradeCount >= 5 || totalMoves >= 35) return "Active market maker";
-  if (avgBidPct >= 0.22) return "Waiver sniper";
-  if (tradeCount <= 1 && totalMoves <= 10) return "Risk-averse";
-  return "Balanced";
-}
-
-function buildTargetingCue(profileLabel, topPosition, tradeCount) {
-  if (profileLabel === "Hyper-aggressive") {
-    return "Open with strong framing and ask for a premium add-on; this manager pays to close.";
-  }
-  if (profileLabel === "Waiver sniper") {
-    return `Pitch ${topPosition} depth before waivers run; they prefer immediate role certainty.`;
-  }
-  if (profileLabel === "Risk-averse") {
-    return "Offer floor-heavy packages and avoid volatile asset framing.";
-  }
-  if (tradeCount >= 5) {
-    return "Use a two-step negotiation: fair opener then targeted sweetener.";
-  }
-  return "Lead with roster-fit logic and projected weekly points gained.";
-}
-
-function buildManagerInsight({
-  displayName,
-  profileLabel,
-  avgBid,
-  maxBudget,
-  topPosition,
-  counterpartyCount,
-  tradeCount
-}) {
-  const bidPct = maxBudget ? Math.round((avgBid / maxBudget) * 100) : 0;
-  return `${displayName} profiles as ${profileLabel}. They bias toward ${topPosition} adds, average ${bidPct}% of budget per FAAB win, and have traded with ${counterpartyCount} unique managers across ${tradeCount} deals.`;
-}
-
-function isCompletedTransaction(transaction) {
-  const status = String(transaction?.status || "").toLowerCase();
-  if (!status) return true;
-  return status === "complete" || status === "completed" || status === "accepted";
 }
 
 function initializeCatalog() {
@@ -1142,7 +833,7 @@ async function waitForSyncToFinishInTerminal() {
   const maxMs = 6 * 60 * 1000;
 
   while (Date.now() - startedAt < maxMs) {
-    await pause(3000);
+    await sleep(3000);
     const response = await fetch("/api/admin/sync/status");
     if (!response.ok) continue;
     const payload = await response.json();
@@ -1848,10 +1539,6 @@ function applyTradeToRoster(beforeRoster, outgoing, incoming) {
   return [...updated];
 }
 
-function dedupe(values) {
-  return [...new Set(values)];
-}
-
 function setStatus(message, level = "info") {
   dom.analysisStatus.textContent = message;
   dom.analysisStatus.dataset.level = level;
@@ -1863,21 +1550,15 @@ function updateFreeUsageUI() {
 }
 
 function getFreeUsage() {
-  const today = getTodayIso();
-  const fallback = { date: today, count: 0 };
-
-  try {
-    const parsed = JSON.parse(localStorage.getItem("fdl_free_usage") || "null");
-    if (!parsed || parsed.date !== today) {
-      return fallback;
-    }
-    return {
-      date: today,
-      count: Number(parsed.count) || 0
-    };
-  } catch (error) {
-    return fallback;
+  if (!state.freeUsage) {
+    hydrateFreeUsage();
   }
+  const today = getTodayIso();
+  if (state.freeUsage.date !== today) {
+    state.freeUsage = { date: today, count: 0 };
+    localStorage.setItem(FREE_USAGE_STORAGE_KEY, JSON.stringify(state.freeUsage));
+  }
+  return state.freeUsage;
 }
 
 function getFreeRunsRemaining() {
@@ -1891,7 +1572,8 @@ function consumeFreeRun() {
     date: getTodayIso(),
     count: Math.min(usage.count + 1, FREE_DAILY_LIMIT)
   };
-  localStorage.setItem("fdl_free_usage", JSON.stringify(next));
+  state.freeUsage = next;
+  localStorage.setItem(FREE_USAGE_STORAGE_KEY, JSON.stringify(next));
 }
 
 function handleFeedbackSubmit(event) {
@@ -1974,32 +1656,6 @@ function buildPlayerNameIndex(players = []) {
   return index;
 }
 
-function topKey(counts) {
-  const entries = Object.entries(counts || {});
-  if (!entries.length) {
-    return null;
-  }
-  entries.sort((a, b) => b[1] - a[1]);
-  return entries[0][0];
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-function signed(value) {
-  const rounded = round(value, 2);
-  if (rounded > 0) {
-    return `+${rounded}`;
-  }
-  return `${rounded}`;
-}
-
 function sum(values) {
   return values.reduce((acc, value) => acc + value, 0);
 }
@@ -2007,19 +1663,4 @@ function sum(values) {
 function average(values) {
   if (!values.length) return 0;
   return sum(values) / values.length;
-}
-
-function round(value, digits = 2) {
-  const factor = 10 ** digits;
-  return Math.round(value * factor) / factor;
-}
-
-function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
-}
-
-function pause(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
 }
