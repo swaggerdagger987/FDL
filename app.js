@@ -4,6 +4,14 @@ const FREE_DAILY_LIMIT = 3;
 const BYE_WEEKS = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
 const SLEEPER_API_BASE = "https://api.sleeper.app/v1";
 const SLEEPER_REGULAR_SEASON_WEEKS = 18;
+const CATALOG_WARM_LIMIT = 350;
+const DATALIST_OPTION_LIMIT = 120;
+const REMOTE_SUGGESTION_LIMIT = 40;
+const REMOTE_SEARCH_MIN_CHARS = 2;
+const REMOTE_SEARCH_DEBOUNCE_MS = 180;
+
+let suggestionRequestCounter = 0;
+let suggestionDebounceTimer = null;
 
 const state = {
   teamAGives: [],
@@ -116,6 +124,9 @@ function wireEvents() {
     }
   });
 
+  dom.teamAInput.addEventListener("input", () => scheduleRemoteSuggestions(dom.teamAInput.value));
+  dom.teamBInput.addEventListener("input", () => scheduleRemoteSuggestions(dom.teamBInput.value));
+
   dom.scoringFormat.addEventListener("change", (event) => {
     state.scoring = event.target.value;
   });
@@ -166,12 +177,69 @@ function wireEvents() {
   dom.downloadFeedbackBtn.addEventListener("click", downloadFeedback);
 }
 
-function renderPlayerOptions() {
-  const sortedPlayers = [...state.catalogPlayers].sort((a, b) => a.name.localeCompare(b.name));
+function renderPlayerOptions(players = state.catalogPlayers, query = "") {
+  const token = normalize(String(query || ""));
+  const source = Array.isArray(players) ? players : state.catalogPlayers;
+  const sortedPlayers = [...source]
+    .filter((player) => {
+      if (!token) return true;
+      return normalize(player.name).includes(token);
+    })
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(0, DATALIST_OPTION_LIMIT);
+
   const options = sortedPlayers
     .map((player) => `<option value="${player.name} (${player.position}, ${player.team})"></option>`)
     .join("");
   dom.datalist.innerHTML = options;
+}
+
+function scheduleRemoteSuggestions(rawValue) {
+  const query = String(rawValue || "").trim();
+  clearTimeout(suggestionDebounceTimer);
+  suggestionDebounceTimer = setTimeout(() => {
+    refreshRemoteSuggestions(query);
+  }, REMOTE_SEARCH_DEBOUNCE_MS);
+}
+
+async function refreshRemoteSuggestions(query) {
+  const token = String(query || "").trim();
+  if (token.length < REMOTE_SEARCH_MIN_CHARS) {
+    renderPlayerOptions(state.catalogPlayers, token);
+    return;
+  }
+
+  const requestId = ++suggestionRequestCounter;
+  try {
+    const response = await fetch(
+      `/api/players?search=${encodeURIComponent(token)}&limit=${REMOTE_SUGGESTION_LIMIT}&sort=name`
+    );
+    if (!response.ok) return;
+    const payload = await response.json();
+    if (requestId !== suggestionRequestCounter) return;
+
+    const rows = Array.isArray(payload.items) ? payload.items : [];
+    const suggestions = [];
+    let catalogChanged = false;
+
+    for (const row of rows) {
+      const player = buildLivePlayerModel(row);
+      if (!player) continue;
+      suggestions.push(player);
+      if (upsertCatalogPlayer(player)) {
+        catalogChanged = true;
+      }
+    }
+
+    if (catalogChanged) {
+      rebuildCatalogIndexes();
+    }
+    if (suggestions.length) {
+      renderPlayerOptions(suggestions, token);
+    }
+  } catch (error) {
+    // Keep local-only suggestions on fetch errors.
+  }
 }
 
 function renderLeagueOptions() {
@@ -222,6 +290,10 @@ function resolvePlayerFromInput(raw) {
   const name = exactOptionMatch ? exactOptionMatch[1].trim() : trimmed;
   const normalized = normalize(name);
 
+  const directId = state.playerNameIndex.get(normalized);
+  if (directId) {
+    return getCatalogPlayer(directId);
+  }
   return state.catalogPlayers.find((player) => normalize(player.name) === normalized) || null;
 }
 
@@ -394,8 +466,9 @@ async function handleLeagueSync() {
       throw new Error("Could not find your roster in that league.");
     }
 
-    setStatus("Loading Sleeper player catalog for ID mapping...", "info");
-    const sleeperPlayersById = await loadSleeperPlayerCatalog();
+    const rosterSleeperIds = dedupe([...(myRoster.players || []), ...(myRoster.reserve || []), ...(myRoster.taxi || [])]);
+    setStatus("Loading Sleeper player subset for roster mapping...", "info");
+    const sleeperPlayersById = await loadSleeperPlayerCatalog(rosterSleeperIds);
     const mapped = mapSleeperRosterToInternalIds(myRoster, sleeperPlayersById);
 
     if (mapped.ids.length === 0) {
@@ -600,7 +673,8 @@ async function fetchAllTransactionsForLeague(leagueId) {
 }
 
 async function buildAdversarialIntelReport(seasonData, myUserId) {
-  const sleeperPlayersById = await loadSleeperPlayerCatalog();
+  const referencedPlayerIds = collectSleeperPlayerIdsFromSeasonData(seasonData);
+  const sleeperPlayersById = await loadSleeperPlayerCatalog(referencedPlayerIds);
   const managerMap = new Map();
 
   let totalTransactions = 0;
@@ -713,6 +787,19 @@ async function buildAdversarialIntelReport(seasonData, myUserId) {
     },
     managers
   };
+}
+
+function collectSleeperPlayerIdsFromSeasonData(seasonData) {
+  const ids = [];
+  for (const season of seasonData || []) {
+    for (const roster of season.rosters || []) {
+      ids.push(...(roster.players || []), ...(roster.reserve || []), ...(roster.taxi || []));
+    }
+    for (const transaction of season.transactions || []) {
+      ids.push(...Object.keys(transaction.adds || {}), ...Object.keys(transaction.drops || {}));
+    }
+  }
+  return dedupe(ids);
 }
 
 function applyRosterMoveMetrics(moves, mode, ownerByRosterId, displayByUserId, managerMap, sleeperPlayersById) {
@@ -900,6 +987,18 @@ function getCatalogPlayer(id) {
   return state.catalogMap[id] || null;
 }
 
+function upsertCatalogPlayer(player) {
+  if (!player || !player.id) return false;
+  const existing = state.catalogMap[player.id];
+  if (existing) {
+    Object.assign(existing, player);
+    return false;
+  }
+  state.catalogPlayers.push(player);
+  state.catalogMap[player.id] = player;
+  return true;
+}
+
 function rebuildCatalogIndexes() {
   state.catalogMap = Object.fromEntries(state.catalogPlayers.map((player) => [player.id, player]));
   state.playerNameIndex = buildPlayerNameIndex(state.catalogPlayers);
@@ -926,7 +1025,7 @@ async function probeDatabaseConnection() {
 
 async function loadCatalogFromDatabase() {
   try {
-    const response = await fetch("/api/players?limit=5000&sort=name");
+    const response = await fetch(`/api/players?limit=${CATALOG_WARM_LIMIT}&sort=points_desc`);
     if (!response.ok) {
       return;
     }
@@ -936,20 +1035,19 @@ async function loadCatalogFromDatabase() {
       return;
     }
 
-    const mergedByName = new Map(state.catalogPlayers.map((player) => [normalize(player.name), player]));
+    let added = 0;
     for (const row of items) {
       const livePlayer = buildLivePlayerModel(row);
       if (!livePlayer) continue;
-      const key = normalize(livePlayer.name);
-      if (!mergedByName.has(key)) {
-        mergedByName.set(key, livePlayer);
+      if (upsertCatalogPlayer(livePlayer)) {
+        added += 1;
       }
     }
 
-    state.catalogPlayers = [...mergedByName.values()];
-    rebuildCatalogIndexes();
-    renderPlayerOptions();
-    setStatus(`Loaded ${state.catalogPlayers.length} players into terminal catalog.`, "success");
+    if (added > 0) {
+      rebuildCatalogIndexes();
+    }
+    renderPlayerOptions(state.catalogPlayers);
   } catch (error) {
     // Fall back silently to seeded local catalog.
   }
@@ -1129,23 +1227,46 @@ async function fetchSleeperJSON(path) {
   return response.json();
 }
 
-async function loadSleeperPlayerCatalog() {
-  if (state.sleeperPlayersById) {
+async function loadSleeperPlayerCatalog(requestedIds = []) {
+  const requested = dedupe((requestedIds || []).map((item) => String(item || "").trim()).filter(Boolean));
+  if (!requested.length) {
+    return state.sleeperPlayersById || {};
+  }
+
+  if (!state.sleeperPlayersById) {
+    state.sleeperPlayersById = {};
+  }
+
+  const missing = requested.filter((playerId) => !state.sleeperPlayersById[playerId]);
+  if (!missing.length) {
     return state.sleeperPlayersById;
   }
 
-  const playersById = await fetchSleeperJSON("/players/nfl");
-  if (!playersById || typeof playersById !== "object") {
-    throw new Error("Sleeper players payload was not usable.");
+  const response = await fetch("/api/sleeper/players/by-ids", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids: missing })
+  });
+  if (!response.ok) {
+    throw new Error(`Sleeper player cache API returned ${response.status}.`);
+  }
+  const payload = await response.json();
+  const players = payload?.players;
+  if (!players || typeof players !== "object") {
+    throw new Error("Sleeper player subset payload was not usable.");
   }
 
-  state.sleeperPlayersById = playersById;
-  return playersById;
+  state.sleeperPlayersById = {
+    ...state.sleeperPlayersById,
+    ...players
+  };
+  return state.sleeperPlayersById;
 }
 
 function mapSleeperRosterToInternalIds(roster, sleeperPlayersById) {
   const sleeperIds = dedupe([...(roster.players || []), ...(roster.reserve || []), ...(roster.taxi || [])]);
   const mappedIds = [];
+  let catalogChanged = false;
 
   for (const sleeperId of sleeperIds) {
     if (state.catalogMap[String(sleeperId)]) {
@@ -1167,13 +1288,55 @@ function mapSleeperRosterToInternalIds(roster, sleeperPlayersById) {
     const internalId = state.playerNameIndex.get(normalized);
     if (internalId) {
       mappedIds.push(internalId);
+      continue;
     }
+
+    const synthesized = buildSleeperFallbackPlayerModel(sleeperId, sleeperPlayer, fullName);
+    if (synthesized) {
+      if (upsertCatalogPlayer(synthesized)) {
+        catalogChanged = true;
+      }
+      mappedIds.push(synthesized.id);
+    }
+  }
+
+  if (catalogChanged) {
+    rebuildCatalogIndexes();
   }
 
   return {
     ids: dedupe(mappedIds),
     mappedCount: dedupe(mappedIds).length,
     totalCount: sleeperIds.length
+  };
+}
+
+function buildSleeperFallbackPlayerModel(sleeperId, sleeperPlayer, fullName) {
+  const position = String(sleeperPlayer?.position || "").toUpperCase();
+  if (!["QB", "RB", "WR", "TE", "K"].includes(position)) {
+    return null;
+  }
+  const ppr = defaultProjectionByPosition(position);
+  const receptions = position === "WR" || position === "TE" ? 4 : position === "RB" ? 2 : 0;
+  const std = Math.max(ppr - receptions, 0);
+  const age = Number(sleeperPlayer?.age);
+  const youthBoost = Number.isFinite(age) ? (age <= 24 ? 1.12 : age <= 27 ? 1.03 : age <= 30 ? 0.93 : 0.82) : 1;
+
+  return {
+    id: String(sleeperId),
+    name: String(fullName || `Player ${sleeperId}`),
+    position,
+    team: sleeperPlayer?.team || "FA",
+    byeWeek: 10,
+    projStd: round(std, 1),
+    projPpr: round(ppr, 1),
+    ros: round(ppr * youthBoost, 1),
+    ceiling: round(ppr * 1.32, 1),
+    floor: round(Math.max(ppr * 0.62 - 1, 0), 1),
+    volatility: position === "QB" ? 0.44 : position === "RB" ? 0.61 : 0.56,
+    marketValue: estimateMarketValue(position, ppr * youthBoost),
+    targetShare: 0,
+    opportunityShare: 0
   };
 }
 

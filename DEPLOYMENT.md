@@ -43,6 +43,7 @@ Configured service:
   - `FDL_AUTO_SYNC_ON_START=1`
   - `FDL_SYNC_BLOCKING=0`
   - `FDL_ADMIN_SYNC_ASYNC=1`
+  - `FDL_SYNC_INCLUDE_NFLVERSE=0` (faster startup sync by default)
 
 ## Publish Update Flow
 
@@ -66,6 +67,10 @@ Render auto-deploys from `main`.
    - `/terminal.html` -> `/league-intel.html`
    - `/screener.html` -> `/lab.html`
 6. In The Lab, click `Refresh Live DB` once and wait for background sync completion.
+
+If you need the heavier Sleeper+nflverse run, trigger:
+
+- `/api/admin/sync?season=YYYY&include_nflverse=1`
 
 ## Data Persistence Caveat
 

@@ -170,7 +170,8 @@ async function loadIntel() {
 
     const leagueChain = await fetchLeagueHistoryChain(state.selectedLeagueId, state.lookback);
     state.seasonData = await fetchLeagueSeasonData(leagueChain);
-    state.sleeperPlayersById = await loadSleeperPlayerCatalog();
+    const referencedPlayerIds = collectSleeperPlayerIdsFromSeasonData(state.seasonData);
+    state.sleeperPlayersById = await loadSleeperPlayerCatalog(referencedPlayerIds);
     state.report = buildAdversarialIntelReport(state.seasonData, state.session.user_id, state.sleeperPlayersById);
     mergeRosterContext(state.report, state.seasonData[0], state.sleeperPlayersById);
 
@@ -283,12 +284,54 @@ async function fetchAllTransactionsForLeague(leagueId) {
   return byWeek.flat();
 }
 
-async function loadSleeperPlayerCatalog() {
-  if (state.sleeperPlayersById) return state.sleeperPlayersById;
-  const payload = await fetchSleeperJSON("/players/nfl");
-  if (!payload || typeof payload !== "object") throw new Error("Could not load Sleeper player catalog.");
-  state.sleeperPlayersById = payload;
-  return payload;
+async function loadSleeperPlayerCatalog(requestedIds = []) {
+  const requested = dedupe((requestedIds || []).map((item) => String(item || "").trim()).filter(Boolean));
+  if (!requested.length) {
+    return state.sleeperPlayersById || {};
+  }
+
+  if (!state.sleeperPlayersById) {
+    state.sleeperPlayersById = {};
+  }
+
+  const missing = requested.filter((playerId) => !state.sleeperPlayersById[playerId]);
+  if (!missing.length) {
+    return state.sleeperPlayersById;
+  }
+
+  const response = await fetch("/api/sleeper/players/by-ids", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids: missing })
+  });
+  if (!response.ok) {
+    throw new Error(`Could not load Sleeper player subset (HTTP ${response.status}).`);
+  }
+
+  const payload = await response.json();
+  const players = payload?.players;
+  if (!players || typeof players !== "object") {
+    throw new Error("Sleeper player subset payload was not usable.");
+  }
+
+  state.sleeperPlayersById = {
+    ...state.sleeperPlayersById,
+    ...players
+  };
+  return state.sleeperPlayersById;
+}
+
+function collectSleeperPlayerIdsFromSeasonData(seasonData) {
+  const ids = [];
+  for (const season of seasonData || []) {
+    for (const roster of season.rosters || []) {
+      ids.push(...(roster.players || []), ...(roster.reserve || []), ...(roster.taxi || []));
+    }
+    for (const transaction of season.transactions || []) {
+      ids.push(...Object.keys(transaction.adds || {}), ...Object.keys(transaction.drops || {}));
+    }
+  }
+  return dedupe(ids);
 }
 
 function buildAdversarialIntelReport(seasonData, myUserId, sleeperPlayersById) {

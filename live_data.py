@@ -14,6 +14,9 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "terminal.db"
+CACHE_DIR = DATA_DIR / "cache"
+SLEEPER_PLAYERS_CACHE_PATH = CACHE_DIR / "sleeper_players_nfl.json"
+SLEEPER_PLAYERS_CACHE_TTL_SECONDS = 24 * 60 * 60
 
 SLEEPER_PLAYERS_URL = "https://api.sleeper.app/v1/players/nfl"
 SLEEPER_STATS_ENDPOINTS = [
@@ -26,6 +29,7 @@ USER_AGENT = "FourthDownLabsTerminal/1.0 (+https://fourthdownlabs.local)"
 NFL_REGULAR_SEASON_WEEKS = 18
 MAX_SCREEN_FILTERS = 24
 DB_SCHEMA_LOCK = threading.Lock()
+SLEEPER_CACHE_LOCK = threading.Lock()
 
 SLEEPER_METRIC_ALIASES = {
     "pts_ppr": "fantasy_points_ppr",
@@ -222,6 +226,126 @@ def fetch_bytes(url, timeout=90):
         return response.read()
 
 
+def parse_iso_timestamp(value):
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    if raw.endswith("Z"):
+        raw = raw[:-1]
+    try:
+        return dt.datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def load_sleeper_players_cache():
+    if not SLEEPER_PLAYERS_CACHE_PATH.exists():
+        return None
+    try:
+        payload = json.loads(SLEEPER_PLAYERS_CACHE_PATH.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return None
+
+    players = payload.get("players")
+    fetched_at = parse_iso_timestamp(payload.get("fetched_at"))
+    if not isinstance(players, dict):
+        return None
+    return {
+        "players": players,
+        "fetched_at": fetched_at,
+        "count": len(players),
+    }
+
+
+def save_sleeper_players_cache(players, fetched_at=None):
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = fetched_at or utc_now_iso()
+    document = {
+        "fetched_at": timestamp,
+        "players": players,
+    }
+    temp_path = SLEEPER_PLAYERS_CACHE_PATH.with_suffix(".json.tmp")
+    temp_path.write_text(json.dumps(document), encoding="utf-8")
+    temp_path.replace(SLEEPER_PLAYERS_CACHE_PATH)
+
+
+def fetch_sleeper_players_cached(force_refresh=False, max_age_seconds=SLEEPER_PLAYERS_CACHE_TTL_SECONDS):
+    with SLEEPER_CACHE_LOCK:
+        cached = load_sleeper_players_cache()
+        now = dt.datetime.utcnow()
+        if cached and not force_refresh:
+            fetched_at = cached.get("fetched_at")
+            if fetched_at and (now - fetched_at).total_seconds() <= max_age_seconds:
+                return cached["players"], {
+                    "source": "cache",
+                    "cached": True,
+                    "fetched_at": fetched_at.replace(microsecond=0).isoformat() + "Z",
+                    "count": cached["count"],
+                }
+
+        try:
+            players = fetch_json(SLEEPER_PLAYERS_URL)
+            if not isinstance(players, dict):
+                raise RuntimeError("Unexpected Sleeper players payload.")
+            timestamp = utc_now_iso()
+            save_sleeper_players_cache(players, fetched_at=timestamp)
+            return players, {
+                "source": "network",
+                "cached": False,
+                "fetched_at": timestamp,
+                "count": len(players),
+            }
+        except Exception as error:  # noqa: BLE001
+            if cached:
+                fetched_at = cached.get("fetched_at")
+                return cached["players"], {
+                    "source": "cache_stale",
+                    "cached": True,
+                    "stale": True,
+                    "fetch_error": str(error),
+                    "fetched_at": fetched_at.replace(microsecond=0).isoformat() + "Z" if fetched_at else None,
+                    "count": cached["count"],
+                }
+            raise
+
+
+def sleeper_player_subset_by_ids(player_ids, force_refresh=False):
+    ids = []
+    seen = set()
+    for raw_id in player_ids or []:
+        token = str(raw_id or "").strip()
+        if not token or token in seen:
+            continue
+        seen.add(token)
+        ids.append(token)
+    ids = ids[:8000]
+
+    players_by_id, cache_info = fetch_sleeper_players_cached(force_refresh=force_refresh)
+    result = {}
+    for player_id in ids:
+        player = players_by_id.get(player_id)
+        if not isinstance(player, dict):
+            continue
+        result[player_id] = {
+            "player_id": player_id,
+            "full_name": player.get("full_name"),
+            "first_name": player.get("first_name"),
+            "last_name": player.get("last_name"),
+            "position": player.get("position"),
+            "age": player.get("age"),
+            "years_exp": player.get("years_exp"),
+            "team": player.get("team"),
+            "status": player.get("status"),
+        }
+
+    return {
+        "count": len(result),
+        "requested_ids": len(ids),
+        "players": result,
+        "cache": cache_info,
+    }
+
+
 def get_connection():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(DB_PATH, timeout=60)
@@ -313,6 +437,7 @@ def initialize_database(connection):
 
         CREATE INDEX IF NOT EXISTS idx_latest_metrics_key_value ON player_latest_metrics(stat_key, stat_value);
         CREATE INDEX IF NOT EXISTS idx_latest_metrics_player ON player_latest_metrics(player_id);
+        CREATE INDEX IF NOT EXISTS idx_latest_metrics_player_key_value ON player_latest_metrics(player_id, stat_key, stat_value);
 
         CREATE TABLE IF NOT EXISTS sync_state (
           key TEXT PRIMARY KEY,
@@ -551,7 +676,7 @@ def run_full_sync(connection, season=None, include_nflverse=True):
 
 
 def sync_sleeper_players(connection):
-    payload = fetch_json(SLEEPER_PLAYERS_URL)
+    payload, cache_info = fetch_sleeper_players_cached()
     now = utc_now_iso()
     rows = []
 
@@ -609,7 +734,10 @@ def sync_sleeper_players(connection):
         rows,
     )
     connection.commit()
-    return {"players_upserted": len(rows)}
+    return {
+        "players_upserted": len(rows),
+        "cache": cache_info,
+    }
 
 
 def fetch_sleeper_week_data(season, week):
@@ -1066,6 +1194,20 @@ def build_filter_sql(alias, metric_filter):
     return f"{alias}.stat_value >= ?", [value]
 
 
+def build_filter_exists_sql(metric_filter):
+    filter_sql, filter_params = build_filter_sql("mf", metric_filter)
+    exists_sql = f"""
+      EXISTS (
+        SELECT 1
+        FROM player_latest_metrics mf
+        WHERE mf.player_id = p.player_id
+          AND mf.stat_key = ?
+          AND {filter_sql}
+      )
+    """
+    return exists_sql, [metric_filter["key"], *filter_params]
+
+
 def dedupe_metric_keys(keys):
     seen = set()
     deduped = []
@@ -1202,23 +1344,13 @@ def fetch_screener_query(connection, payload):
     sort_null_fill = "9999999" if sort_is_asc else "-9999999"
     sort_order = "ASC" if sort_is_asc else "DESC"
 
-    join_params = []
     where_params = []
-    join_parts = []
     where_parts = ["1=1"]
 
-    for index, metric_filter in enumerate(filters):
-        alias = f"mf{index}"
-        join_parts.append(
-            f"JOIN player_latest_metrics {alias} ON {alias}.player_id = p.player_id AND {alias}.stat_key = ?"
-        )
-        join_params.append(metric_filter["key"])
-        filter_sql, filter_params = build_filter_sql(alias, metric_filter)
-        where_parts.append(filter_sql)
-        where_params.extend(filter_params)
-
-    join_parts.append("LEFT JOIN player_latest_metrics msort ON msort.player_id = p.player_id AND msort.stat_key = ?")
-    join_params.append(sort_key or "fantasy_points_ppr")
+    for metric_filter in filters:
+        exists_sql, exists_params = build_filter_exists_sql(metric_filter)
+        where_parts.append(exists_sql)
+        where_params.extend(exists_params)
 
     if search:
         where_parts.append("(LOWER(p.full_name) LIKE ? OR LOWER(p.first_name) LIKE ? OR LOWER(p.last_name) LIKE ?)")
@@ -1238,32 +1370,100 @@ def fetch_screener_query(connection, payload):
         where_parts.append("p.age <= ?")
         where_params.append(age_max)
 
-    sql = f"""
-      SELECT
-        p.player_id, p.full_name, p.position, p.team, p.status, p.age, p.years_exp,
-        l.season AS latest_season, l.week AS latest_week, l.source AS latest_source,
-        l.fantasy_points_ppr AS latest_fantasy_points_ppr,
-        l.passing_yards AS latest_passing_yards,
-        l.rushing_yards AS latest_rushing_yards,
-        l.receiving_yards AS latest_receiving_yards,
-        l.receptions AS latest_receptions,
-        l.touchdowns AS latest_touchdowns
-      FROM players p
-      LEFT JOIN player_latest_stats l ON l.player_id = p.player_id
-      {' '.join(join_parts)}
-      WHERE {' AND '.join(where_parts)}
-      ORDER BY COALESCE(msort.stat_value, COALESCE(l.fantasy_points_ppr, {sort_null_fill})) {sort_order}, p.full_name ASC
-      LIMIT ? OFFSET ?
-    """
-    params = [*join_params, *where_params, limit, offset]
+    select_params = [sort_key or "fantasy_points_ppr", *where_params, limit, offset]
 
-    rows = connection.execute(sql, params).fetchall()
-    items = [dict(row) for row in rows]
-
-    player_ids = [item["player_id"] for item in items]
-    metric_values = fetch_metric_values(connection, player_ids, requested_metric_keys)
-    for item in items:
-        item["metrics"] = metric_values.get(item["player_id"], {})
+    if requested_metric_keys:
+        metric_placeholders = ",".join(["?"] * len(requested_metric_keys))
+        sql = f"""
+          WITH ranked AS (
+            SELECT
+              p.player_id, p.full_name, p.position, p.team, p.status, p.age, p.years_exp,
+              l.season AS latest_season, l.week AS latest_week, l.source AS latest_source,
+              l.fantasy_points_ppr AS latest_fantasy_points_ppr,
+              l.passing_yards AS latest_passing_yards,
+              l.rushing_yards AS latest_rushing_yards,
+              l.receiving_yards AS latest_receiving_yards,
+              l.receptions AS latest_receptions,
+              l.touchdowns AS latest_touchdowns,
+              COALESCE(msort.stat_value, COALESCE(l.fantasy_points_ppr, {sort_null_fill})) AS sort_value
+            FROM players p
+            LEFT JOIN player_latest_stats l ON l.player_id = p.player_id
+            LEFT JOIN player_latest_metrics msort
+              ON msort.player_id = p.player_id
+             AND msort.stat_key = ?
+            WHERE {' AND '.join(where_parts)}
+            ORDER BY sort_value {sort_order}, p.full_name ASC
+            LIMIT ? OFFSET ?
+          )
+          SELECT
+            r.player_id, r.full_name, r.position, r.team, r.status, r.age, r.years_exp,
+            r.latest_season, r.latest_week, r.latest_source,
+            r.latest_fantasy_points_ppr, r.latest_passing_yards, r.latest_rushing_yards,
+            r.latest_receiving_yards, r.latest_receptions, r.latest_touchdowns,
+            r.sort_value,
+            mv.stat_key,
+            mv.stat_value
+          FROM ranked r
+          LEFT JOIN player_latest_metrics mv
+            ON mv.player_id = r.player_id
+           AND mv.stat_key IN ({metric_placeholders})
+          ORDER BY r.sort_value {sort_order}, r.full_name ASC
+        """
+        rows = connection.execute(sql, [*select_params, *requested_metric_keys]).fetchall()
+        items_by_player_id = {}
+        order = []
+        for row in rows:
+            player_id = row["player_id"]
+            if player_id not in items_by_player_id:
+                item = {
+                    "player_id": row["player_id"],
+                    "full_name": row["full_name"],
+                    "position": row["position"],
+                    "team": row["team"],
+                    "status": row["status"],
+                    "age": row["age"],
+                    "years_exp": row["years_exp"],
+                    "latest_season": row["latest_season"],
+                    "latest_week": row["latest_week"],
+                    "latest_source": row["latest_source"],
+                    "latest_fantasy_points_ppr": row["latest_fantasy_points_ppr"],
+                    "latest_passing_yards": row["latest_passing_yards"],
+                    "latest_rushing_yards": row["latest_rushing_yards"],
+                    "latest_receiving_yards": row["latest_receiving_yards"],
+                    "latest_receptions": row["latest_receptions"],
+                    "latest_touchdowns": row["latest_touchdowns"],
+                    "metrics": {},
+                }
+                items_by_player_id[player_id] = item
+                order.append(player_id)
+            stat_key = row["stat_key"]
+            if stat_key:
+                items_by_player_id[player_id]["metrics"][stat_key] = row["stat_value"]
+        items = [items_by_player_id[player_id] for player_id in order]
+    else:
+        sql = f"""
+          SELECT
+            p.player_id, p.full_name, p.position, p.team, p.status, p.age, p.years_exp,
+            l.season AS latest_season, l.week AS latest_week, l.source AS latest_source,
+            l.fantasy_points_ppr AS latest_fantasy_points_ppr,
+            l.passing_yards AS latest_passing_yards,
+            l.rushing_yards AS latest_rushing_yards,
+            l.receiving_yards AS latest_receiving_yards,
+            l.receptions AS latest_receptions,
+            l.touchdowns AS latest_touchdowns
+          FROM players p
+          LEFT JOIN player_latest_stats l ON l.player_id = p.player_id
+          LEFT JOIN player_latest_metrics msort
+            ON msort.player_id = p.player_id
+           AND msort.stat_key = ?
+          WHERE {' AND '.join(where_parts)}
+          ORDER BY COALESCE(msort.stat_value, COALESCE(l.fantasy_points_ppr, {sort_null_fill})) {sort_order}, p.full_name ASC
+          LIMIT ? OFFSET ?
+        """
+        rows = connection.execute(sql, select_params).fetchall()
+        items = [dict(row) for row in rows]
+        for item in items:
+            item["metrics"] = {}
 
     return {
         "count": len(items),

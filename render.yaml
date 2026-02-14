@@ -15,3 +15,5 @@ services:
         value: "0"
       - key: FDL_ADMIN_SYNC_ASYNC
         value: "1"
+      - key: FDL_SYNC_INCLUDE_NFLVERSE
+        value: "0"

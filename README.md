@@ -73,11 +73,17 @@ Primary sources:
 - Sleeper API (`/v1/players/nfl`, leagues/users/rosters/transactions)
 - nflverse data assets (via sync pipeline)
 
+Sync default:
+
+- `/api/admin/sync` now defaults to `include_nflverse=false` for faster warm-up.
+- Use `/api/admin/sync?include_nflverse=1` for the full Sleeper+nflverse pass.
+
 ## API Endpoints
 
 - `GET /api/health`
 - `GET /api/filter-options`
 - `GET /api/players`
+- `GET|POST /api/sleeper/players/by-ids`
 - `POST /api/screener/query`
 - `GET /api/screener`
 - `GET /api/players/{player_id}`
