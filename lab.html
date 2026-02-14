@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>The Lab | Fourth Down Labs</title>
+    <meta
+      name="description"
+      content="Fourth Down Labs The Lab: custom dynasty player screening with shareable views and live stat filtering."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="ambient-backdrop" aria-hidden="true"></div>
+    <header class="site-header">
+      <a class="brand" href="./index.html">
+        <span class="brand-dot"></span>
+        Fourth Down Labs
+      </a>
+      <nav class="main-nav" aria-label="Primary">
+        <a class="nav-link" data-nav-page="lab" href="./lab.html">Open the Lab</a>
+        <a class="nav-link" data-nav-page="intel" href="./league-intel.html">League Intel</a>
+        <button id="connect-sleeper-btn" class="nav-cta nav-connect-btn" type="button">Connect Sleeper</button>
+      </nav>
+    </header>
+
+    <main class="site-shell">
+      <section class="hero-panel fade-in">
+        <p class="eyebrow">THE LAB</p>
+        <div class="lab-section-head">
+          <h1>Build custom dynasty screens in seconds.</h1>
+          <div class="lab-actions">
+            <button id="screen-save-view" class="secondary-btn" type="button">Save View</button>
+            <button id="screen-share-view" class="secondary-btn" type="button">Share View Link</button>
+          </div>
+        </div>
+        <p class="subhead">
+          Stack any metrics, save your favorite setups, and share screenshot-ready outputs with your league.
+        </p>
+      </section>
+
+      <div class="hand-divider" aria-hidden="true"></div>
+
+      <section class="panel data-panel">
+        <h2>Filters</h2>
+        <div class="control-grid lab-filter-grid">
+          <label>
+            Search
+            <input id="screen-search" placeholder="Player name..." />
+          </label>
+
+          <div class="position-filter-group">
+            <span class="filter-label">Positions</span>
+            <div id="screen-position-pills" class="position-pills" role="group" aria-label="Position filters">
+              <button class="position-pill active" type="button" data-position="">All</button>
+              <button class="position-pill" type="button" data-position="QB">QB</button>
+              <button class="position-pill" type="button" data-position="RB">RB</button>
+              <button class="position-pill" type="button" data-position="WR">WR</button>
+              <button class="position-pill" type="button" data-position="TE">TE</button>
+              <button class="position-pill" type="button" data-position="K">K</button>
+              <button class="position-pill" type="button" data-position="PICK">PICK</button>
+            </div>
+          </div>
+
+          <label>
+            Team
+            <select id="screen-team">
+              <option value="">All Teams</option>
+            </select>
+          </label>
+
+          <label>
+            Age Range
+            <div class="age-range-inputs">
+              <input id="screen-age-min" type="number" min="18" max="45" step="1" placeholder="Min" />
+              <input id="screen-age-max" type="number" min="18" max="45" step="1" placeholder="Max" />
+            </div>
+          </label>
+        </div>
+      </section>
+
+      <div class="hand-divider" aria-hidden="true"></div>
+
+      <section class="panel data-panel">
+        <div class="lab-section-head">
+          <h2>Column Picker + Metric Filters</h2>
+          <button id="screen-reset-columns" class="secondary-btn" type="button">Reset Columns</button>
+        </div>
+        <div class="active-columns-panel data-panel">
+          <div class="active-filters-head">
+            <h3>Active Columns</h3>
+            <p class="hint">Drag chips to reorder. Remove what you do not need.</p>
+          </div>
+          <div id="screen-active-columns" class="active-columns"></div>
+        </div>
+
+        <div class="screener-builder">
+          <div class="metric-catalog-panel">
+            <label>
+              Find Metric
+              <input id="metric-search" placeholder="Type: age, yac, air yards..." />
+            </label>
+            <div id="screen-metric-categories" class="metric-categories" aria-label="Metric categories"></div>
+            <label>
+              Available Metrics
+              <select id="metric-select" class="metric-select" size="14" aria-label="Available metrics"></select>
+            </label>
+            <div class="metric-select-actions">
+              <button id="screen-add-column" class="secondary-btn" type="button">Add as Column</button>
+              <button id="screen-add-metric" class="secondary-btn" type="button">Add as Filter</button>
+            </div>
+            <label>
+              Custom Metric Key
+              <input id="screen-custom-metric" placeholder="Example: receiving_yards_after_catch" />
+            </label>
+            <div class="metric-select-actions">
+              <button id="screen-add-custom-column" class="secondary-btn" type="button">Custom Column</button>
+              <button id="screen-add-custom-metric" class="secondary-btn" type="button">Custom Filter</button>
+            </div>
+          </div>
+          <div class="active-filters-panel">
+            <div class="active-filters-head">
+              <h3>Active Metric Filters</h3>
+              <button id="screen-clear-filters" class="secondary-btn" type="button">Clear</button>
+            </div>
+            <div id="screen-active-filters" class="active-filters"></div>
+          </div>
+        </div>
+
+        <div class="saved-views-panel data-panel">
+          <div class="active-filters-head">
+            <h3>Saved Views</h3>
+            <button id="screen-clear-saved-views" class="secondary-btn" type="button">Clear Saved</button>
+          </div>
+          <div id="screen-saved-views" class="saved-views"></div>
+        </div>
+
+        <div class="filter-actions">
+          <button id="screen-run" class="primary-btn" type="button">Run Screen</button>
+          <button id="screen-refresh-db" class="secondary-btn" type="button">Refresh Live DB</button>
+        </div>
+        <p id="screen-status" class="status" data-level="info">Ready. Run a screen to load results.</p>
+      </section>
+
+      <div class="hand-divider" aria-hidden="true"></div>
+
+      <section class="panel data-panel">
+        <div class="results-head">
+          <h2>Results</h2>
+          <p id="screen-sort" class="hint">Sorted by Fantasy Points PPR (desc)</p>
+        </div>
+        <p id="screen-count" class="hint">0 players</p>
+        <div class="table-wrap lab-table-wrap">
+          <table class="screener-table">
+            <thead id="screen-results-head"></thead>
+            <tbody id="screen-results"></tbody>
+          </table>
+        </div>
+        <p class="brand-watermark">fourthdownlabs.com</p>
+      </section>
+    </main>
+
+    <script type="module" src="./lab.js"></script>
+  </body>
+</html>

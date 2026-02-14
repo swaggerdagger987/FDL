@@ -1,40 +1,49 @@
-# Fourth Down Labs Terminal MVP
+# Fourth Down Labs V1 (3-Page IA)
 
-This project is now a multi-page fantasy football terminal with:
+Fourth Down Labs is now organized around a strict product architecture:
 
-- Professional landing + product navigation pages
-- Live terminal workflow (trade analyzer + adversarial intelligence)
-- Local live-data database for **all NFL players**
-- Dedicated player screener powered by the local database
+- `/index.html` (Home)
+- `/lab.html` (The Lab)
+- `/league-intel.html` (League Intel + manager deep-dive state)
 
-## Site Pages
+The primary UX is Sleeper-first and does not include trade analyzer flows in the main navigation.
 
-- `/Users/sohammehta/Documents/New project/index.html` (landing)
-- `/Users/sohammehta/Documents/New project/terminal.html` (core terminal)
-- `/Users/sohammehta/Documents/New project/screener.html` (all-player live screener)
-- `/Users/sohammehta/Documents/New project/mission.html`
-- `/Users/sohammehta/Documents/New project/modules.html`
-- `/Users/sohammehta/Documents/New project/pricing.html`
-- `/Users/sohammehta/Documents/New project/roadmap.html`
+## Canonical + Compatibility Routes
 
-## Live Data + Database
+Canonical pages:
 
-Backend files:
+- `http://localhost:8000/`
+- `http://localhost:8000/index.html`
+- `http://localhost:8000/lab.html`
+- `http://localhost:8000/league-intel.html`
 
-- `/Users/sohammehta/Documents/New project/terminal_server.py`
-- `/Users/sohammehta/Documents/New project/live_data.py`
+Compatibility redirects:
 
-Database:
+- `/screener.html` -> `/lab.html`
+- `/terminal.html` -> `/league-intel.html`
+- `/mission.html` -> `/index.html`
+- `/modules.html` -> `/index.html`
+- `/pricing.html` -> `/index.html`
+- `/roadmap.html` -> `/index.html`
 
-- SQLite file at `/Users/sohammehta/Documents/New project/data/terminal.db`
+## Shared State Contracts
 
-Live sources used:
+LocalStorage keys:
 
-- Sleeper players endpoint (`/v1/players/nfl`)
-- Sleeper weekly stats endpoints (regular season weeks)
-- nflverse-data GitHub release assets for player stats (seasonal sync)
+- `fdl_sleeper_session_v1`
+- `fdl_saved_lab_views_v2`
+- `fdl_last_lab_view_v2`
 
-## Run
+Lab URL contracts:
+
+- `?view=<base64url-json>`
+- Optional debug fields: `sort=<key>:<asc|desc>`, `positions=QB,RB,...`, `league=<league_id>`
+
+League Intel URL contract:
+
+- `?league=<league_id>&manager=<user_id>&lookback=<1-4>`
+
+## Run Locally
 
 From `/Users/sohammehta/Documents/New project`:
 
@@ -45,46 +54,45 @@ python3 terminal_server.py --sync-on-start
 Then open:
 
 - [http://localhost:8000](http://localhost:8000)
-- [http://localhost:8000/terminal.html](http://localhost:8000/terminal.html)
-- [http://localhost:8000/screener.html](http://localhost:8000/screener.html)
+- [http://localhost:8000/lab.html](http://localhost:8000/lab.html)
+- [http://localhost:8000/league-intel.html](http://localhost:8000/league-intel.html)
 
-Docker option:
+## Data + Sync
 
-```bash
-docker build -t fdl-terminal .
-docker run --rm -p 8000:8000 -e FDL_AUTO_SYNC_ON_START=1 fdl-terminal
-```
+Backend files:
+
+- `/Users/sohammehta/Documents/New project/terminal_server.py`
+- `/Users/sohammehta/Documents/New project/live_data.py`
+
+SQLite database:
+
+- `/Users/sohammehta/Documents/New project/data/terminal.db`
+
+Primary sources:
+
+- Sleeper API (`/v1/players/nfl`, leagues/users/rosters/transactions)
+- nflverse data assets (via sync pipeline)
 
 ## API Endpoints
 
 - `GET /api/health`
-- `GET /api/players`
-- `GET /api/screener`
 - `GET /api/filter-options`
+- `GET /api/players`
 - `POST /api/screener/query`
+- `GET /api/screener`
 - `GET /api/players/{player_id}`
 - `GET|POST /api/admin/sync?season=YYYY`
+- `GET /api/admin/sync/status`
 
-## Deploy + Re-Publish
+`POST /api/screener/query` supports:
 
-- Deployment config: `/Users/sohammehta/Documents/New project/render.yaml`
-- Full guide: `/Users/sohammehta/Documents/New project/DEPLOYMENT.md`
+- `positions[]` (and legacy `position` compatibility)
+- `age_min`, `age_max`
+- `columns[]`
+- `filters[]`
+- `sort_key`, `sort_direction`
 
-Free-first path:
+## Deploy
 
-1. Push repo to GitHub.
-2. Create a Render Blueprint service from the repo.
-3. Share the Render URL.
-4. Re-publish by pushing new commits (`git push`), which auto-redeploys.
-
-## Quick Validation Checklist
-
-1. Start `terminal_server.py` with `--sync-on-start`.
-2. Check `/api/health` returns player/stats counts.
-3. In Terminal page:
-   - verify database status shows connected
-   - click `Refresh Live DB`
-   - load Sleeper leagues and sync one
-4. In Screener page:
-   - run filters
-   - confirm results show live stat columns for players.
+- Render blueprint config: `/Users/sohammehta/Documents/New project/render.yaml`
+- Full deployment notes: `/Users/sohammehta/Documents/New project/DEPLOYMENT.md`

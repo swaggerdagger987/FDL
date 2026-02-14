@@ -1,49 +1,52 @@
-# Deployment Guide (Free-First)
+# Deployment Guide (Render, Free-First)
 
-This repo is set up for one-click Render deploys using `/Users/sohammehta/Documents/New project/render.yaml`.
+This repo is configured for Render Blueprint deploys via `/Users/sohammehta/Documents/New project/render.yaml`.
 
-## What You Can Do for Free
+## Current Production IA
 
-As of February 12, 2026:
+Deployed app should expose:
 
-- Render supports free web services (with idle spin-down and cold starts): [Render Pricing](https://render.com/pricing)
-- Railway does **not** have a $0 always-free production tier (starts at $5/month usage): [Railway Pricing](https://railway.com/pricing)
-- Koyeb has a free tier with monthly limits: [Koyeb Serverless Pricing](https://www.koyeb.com/pricing/serverless)
+- `/index.html` (Home)
+- `/lab.html` (The Lab)
+- `/league-intel.html` (League Intel)
 
-## Recommended: Render (Fastest Path)
+Legacy routes redirect to canonical pages.
 
-### 1) Push this project to GitHub
+## Cost Notes
+
+Render free web services are typically free with limits (cold starts, idle spin-down, and resource caps). Verify current terms before launch:
+
+- [Render Pricing](https://render.com/pricing)
+
+## One-Time Setup
 
 From `/Users/sohammehta/Documents/New project`:
 
 ```bash
-git init
 git add .
-git commit -m "Initial deploy setup"
-git branch -M main
-git remote add origin https://github.com/<your-user>/<your-repo>.git
-git push -u origin main
+git commit -m "Ship 3-page IA reset"
+git push
 ```
 
-### 2) Create Render web service
+In Render:
 
-1. Go to [Render Dashboard](https://dashboard.render.com/)
-2. Click `New +` -> `Blueprint`
-3. Select your repo
-4. Render will detect `render.yaml`
-5. Click `Apply`
+1. Open [Render Dashboard](https://dashboard.render.com/)
+2. Create or open your Blueprint service
+3. Confirm it uses `render.yaml`
+4. Apply/sync blueprint
 
-It will deploy with:
+Configured service:
 
 - Start command: `python3 terminal_server.py --host 0.0.0.0 --port $PORT`
 - Health check: `/api/health`
-- Auto-sync env enabled:
+- Env vars:
   - `FDL_AUTO_SYNC_ON_START=1`
   - `FDL_SYNC_BLOCKING=0`
+  - `FDL_ADMIN_SYNC_ASYNC=1`
 
-## Update + Re-Publish Flow
+## Publish Update Flow
 
-Every update:
+For each iteration:
 
 ```bash
 git add .
@@ -51,14 +54,26 @@ git commit -m "Describe update"
 git push
 ```
 
-Render auto-redeploys from `main`.
+Render auto-deploys from `main`.
 
-## Important Data Caveat
+## Post-Deploy Smoke Test
 
-This app currently uses local SQLite (`data/terminal.db`). On most free cloud services, local disk is not durable across restarts/redeploys.
+1. Check `https://<your-service>.onrender.com/api/health`
+2. Open `https://<your-service>.onrender.com/`
+3. Open `https://<your-service>.onrender.com/lab.html`
+4. Open `https://<your-service>.onrender.com/league-intel.html`
+5. Confirm redirects:
+   - `/terminal.html` -> `/league-intel.html`
+   - `/screener.html` -> `/lab.html`
+6. In The Lab, click `Refresh Live DB` once and wait for background sync completion.
 
-Mitigation already configured:
+## Data Persistence Caveat
 
-- Startup background sync runs automatically and repopulates data.
+This app uses local SQLite (`data/terminal.db`). On free instances, local disk can reset during restarts/redeploys.
 
-If you want durable data + fast restarts, next step is migrating storage to a managed database.
+Mitigation already in place:
+
+- Startup sync repopulates data automatically.
+- Manual admin sync endpoint is available if needed.
+
+For durable persistence and faster warm starts, move to managed storage in a future pass.

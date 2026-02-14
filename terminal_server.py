@@ -11,6 +11,23 @@ from urllib.parse import parse_qs, urlparse
 import live_data
 
 BASE_DIR = Path(__file__).resolve().parent
+LEGACY_REDIRECTS = {
+    "/index": "/index.html",
+    "/lab": "/lab.html",
+    "/league-intel": "/league-intel.html",
+    "/screener": "/lab.html",
+    "/screener.html": "/lab.html",
+    "/terminal": "/league-intel.html",
+    "/terminal.html": "/league-intel.html",
+    "/mission": "/index.html",
+    "/mission.html": "/index.html",
+    "/modules": "/index.html",
+    "/modules.html": "/index.html",
+    "/pricing": "/index.html",
+    "/pricing.html": "/index.html",
+    "/roadmap": "/index.html",
+    "/roadmap.html": "/index.html",
+}
 SYNC_STATE_LOCK = threading.Lock()
 SYNC_THREAD = None
 SYNC_STATE = {
@@ -87,9 +104,26 @@ class TerminalRequestHandler(SimpleHTTPRequestHandler):
         if parsed.path.startswith("/api/"):
             self.handle_api(parsed, method="GET")
             return
+        redirect_target = LEGACY_REDIRECTS.get(parsed.path)
+        if redirect_target:
+            self.redirect_to(redirect_target, parsed.query)
+            return
         if parsed.path == "/":
             self.path = "/index.html"
         super().do_GET()
+
+    def do_HEAD(self):  # noqa: N802
+        parsed = urlparse(self.path)
+        if parsed.path.startswith("/api/"):
+            self.send_error(405, "Method Not Allowed")
+            return
+        redirect_target = LEGACY_REDIRECTS.get(parsed.path)
+        if redirect_target:
+            self.redirect_to(redirect_target, parsed.query)
+            return
+        if parsed.path == "/":
+            self.path = "/index.html"
+        super().do_HEAD()
 
     def do_POST(self):  # noqa: N802
         parsed = urlparse(self.path)
@@ -225,6 +259,14 @@ class TerminalRequestHandler(SimpleHTTPRequestHandler):
 
     def do_OPTIONS(self):  # noqa: N802
         self.send_response(204)
+        self.end_headers()
+
+    def redirect_to(self, path, query):
+        location = str(path)
+        if query:
+            location = f"{location}?{query}"
+        self.send_response(302)
+        self.send_header("Location", location)
         self.end_headers()
 
     def send_json(self, status_code, payload):

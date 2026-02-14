@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>League Intel | Fourth Down Labs</title>
+    <meta
+      name="description"
+      content="Scout your Sleeper leaguemates with aggression profiles, FAAB behavior, and manager deep-dive reports."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="ambient-backdrop" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <a class="brand" href="./index.html">
+        <span class="brand-dot"></span>
+        Fourth Down Labs
+      </a>
+      <nav class="main-nav" aria-label="Primary">
+        <a class="nav-link" data-nav-page="lab" href="./lab.html">Open the Lab</a>
+        <a class="nav-link" data-nav-page="intel" href="./league-intel.html">League Intel</a>
+        <button id="connect-sleeper-btn" class="nav-cta nav-connect-btn" type="button">Connect Sleeper</button>
+      </nav>
+    </header>
+
+    <main class="site-shell">
+      <section id="intel-gate" class="hero-panel fade-in">
+        <p class="eyebrow">LEAGUE INTEL</p>
+        <h1>Connect your Sleeper account to scout your leaguemates.</h1>
+        <p class="subhead">No OAuth. Username only. We pull league behavior and render manager scouting reports.</p>
+        <form id="intel-connect-form" class="intel-connect-form">
+          <label>
+            Sleeper Username
+            <input id="intel-username" placeholder="e.g. soham123" />
+          </label>
+          <label>
+            Season
+            <input id="intel-season" type="number" min="2017" max="2100" />
+          </label>
+          <button id="intel-connect-btn" class="primary-btn" type="submit">Connect</button>
+        </form>
+        <p id="intel-gate-status" class="status" data-level="info"></p>
+      </section>
+
+      <section id="intel-content" class="hidden">
+        <section class="hero-panel fade-in">
+          <p class="eyebrow">LEAGUE INTEL</p>
+          <h1>Adversarial Manager Scouting</h1>
+          <p class="subhead">Find style tags, weakness signals, and predicted bidding behavior before your rivals act.</p>
+          <div class="control-grid intel-controls">
+            <label>
+              League
+              <select id="intel-league-select"></select>
+            </label>
+            <label>
+              Seasons to Analyze
+              <select id="intel-lookback">
+                <option value="1">1 season</option>
+                <option value="2" selected>2 seasons</option>
+                <option value="3">3 seasons</option>
+                <option value="4">4 seasons</option>
+              </select>
+            </label>
+            <button id="intel-refresh-btn" class="secondary-btn" type="button">Refresh Intel</button>
+          </div>
+          <p id="intel-status" class="status" data-level="info">Ready.</p>
+        </section>
+
+        <div class="hand-divider" aria-hidden="true"></div>
+
+        <section class="panel data-panel">
+          <div class="results-head">
+            <h2>All Managers</h2>
+            <p id="intel-summary" class="hint"></p>
+          </div>
+          <div id="intel-manager-grid" class="intel-manager-grid"></div>
+          <p class="brand-watermark">fourthdownlabs.com</p>
+        </section>
+
+        <div class="hand-divider" aria-hidden="true"></div>
+
+        <section id="intel-detail-section" class="panel data-panel hidden">
+          <div class="results-head">
+            <h2 id="intel-detail-title">Scouting Report</h2>
+            <button id="intel-back-btn" class="secondary-btn" type="button">Back To Grid</button>
+          </div>
+          <p id="intel-detail-subhead" class="hint"></p>
+
+          <div id="intel-overview-cards" class="intel-overview-cards"></div>
+
+          <div class="intel-detail-grid">
+            <article class="intel-detail-card">
+              <h3>Roster Composition</h3>
+              <div id="intel-roster-bars" class="intel-roster-bars"></div>
+              <div id="intel-roster-meta" class="intel-metadata-list"></div>
+            </article>
+
+            <article class="intel-detail-card predictor-card">
+              <h3>FAAB Behavior + Predictor</h3>
+              <div id="intel-faab-stats" class="intel-metadata-list"></div>
+              <div id="intel-faab-predictor" class="intel-predictor-box"></div>
+            </article>
+          </div>
+
+          <article class="intel-detail-card">
+            <h3>Trade Behavior</h3>
+            <div id="intel-trade-pattern" class="intel-metadata-list"></div>
+            <div id="intel-trade-timeline" class="intel-trade-timeline"></div>
+          </article>
+
+          <p class="brand-watermark">fourthdownlabs.com</p>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="./league_intel.js"></script>
+  </body>
+</html>
