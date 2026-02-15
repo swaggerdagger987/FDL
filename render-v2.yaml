@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: fantasy-football-terminal-v2
+    runtime: python
+    plan: free
+    healthCheckPath: /api/v2/health
+    buildCommand: |
+      pip install -r requirements.txt
+      npm --prefix src/frontend install
+      npm --prefix src/frontend run build
+    startCommand: sh -c 'python3 server_v2.py'
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: FDL_APP_ENV
+        value: production
+      - key: FDL_CORS_ALLOW_ORIGINS
+        value: https://fantasy-football-terminal.onrender.com
+      - key: FDL_V2_HOST
+        value: 0.0.0.0

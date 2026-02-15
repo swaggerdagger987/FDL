@@ -4,3 +4,8 @@ __pycache__/
 verify_push.txt
 eval "$(ssh-agent -s)"
 eval "$(ssh-agent -s)".pub
+src/frontend/node_modules/
+src/frontend/dist/
+.pytest_cache/
+playwright-report/
+test-results/

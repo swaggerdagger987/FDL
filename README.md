@@ -102,3 +102,58 @@ Sync default:
 
 - Render blueprint config: `/Users/sohammehta/Documents/New project/render.yaml`
 - Full deployment notes: `/Users/sohammehta/Documents/New project/DEPLOYMENT.md`
+
+## V2 Rewrite Track (Parallel Cutover)
+
+A parallel v2 stack now exists for the scalability rewrite:
+
+- Backend: FastAPI (`/api/v2/*`) in `src/backend`
+- Frontend: React + Vite in `src/frontend`
+- Runner: `python3 server_v2.py`
+
+### Run v2 locally
+
+From `/Users/sohammehta/Documents/New project`:
+
+```bash
+python3 -m pip install -r requirements.txt
+npm --prefix src/frontend install
+npm --prefix src/frontend run build
+python3 server_v2.py
+```
+
+Then open:
+
+- `http://127.0.0.1:8010/v2`
+- `http://127.0.0.1:8010/api/v2/docs`
+
+### v2 API namespace
+
+- `GET /api/v2/health`
+- `GET /api/v2/players`
+- `GET /api/v2/screener/options`
+- `POST /api/v2/screener/query`
+- `POST /api/v2/sync/jobs`
+- `GET /api/v2/sync/jobs/{job_id}`
+- `GET /api/v2/intel/report`
+
+### v2 Runtime Controls (Env)
+
+- `FDL_DB_PATH`: SQLite path (shared with legacy while in parallel mode)
+- `FDL_CORS_ALLOW_ORIGINS`: comma-separated allowlist
+- `FDL_REQUEST_BODY_LIMIT_BYTES`: default `10485760` (10MB)
+- `FDL_REQUEST_TIMEOUT_SECONDS`: default `30`
+- `FDL_API_CACHE_PLAYERS_SECONDS`: default `60`
+- `FDL_API_CACHE_SCREENER_OPTIONS_SECONDS`: default `300`
+- `FDL_V2_AUTO_SYNC_ON_START`: set `1` to queue non-blocking warm sync on startup when DB is empty
+- `FDL_V2_AUTO_SYNC_INCLUDE_NFLVERSE`: optional (`0/1`) for startup sync mode
+- `FDL_V2_AUTO_SYNC_SEASON`: optional explicit season for startup sync
+
+### Quality gates
+
+```bash
+make test
+npm --prefix src/frontend run build
+```
+
+CI workflow is defined in `.github/workflows/ci.yml`.

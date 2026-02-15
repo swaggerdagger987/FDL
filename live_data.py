@@ -4,6 +4,7 @@ import gzip
 import io
 import json
 import math
+import os
 import re
 import sqlite3
 import threading
@@ -15,7 +16,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
-DB_PATH = DATA_DIR / "terminal.db"
+DB_PATH = Path(os.getenv("FDL_DB_PATH", str(DATA_DIR / "terminal.db"))).expanduser()
 CACHE_DIR = DATA_DIR / "cache"
 SLEEPER_PLAYERS_CACHE_PATH = CACHE_DIR / "sleeper_players_nfl.json"
 SLEEPER_PLAYERS_CACHE_TTL_SECONDS = 24 * 60 * 60
