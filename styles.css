@@ -669,7 +669,163 @@ h3 {
 }
 
 .home-hero {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
   padding-bottom: 1.2rem;
+  min-height: 340px;
+}
+
+.home-hero > :not(.home-hero-scene) {
+  position: relative;
+  z-index: 3;
+}
+
+.home-hero-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.home-field-glow {
+  position: absolute;
+  width: 540px;
+  height: 540px;
+  right: -8%;
+  top: -34%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(31, 150, 87, 0.28) 0%, rgba(31, 150, 87, 0) 72%);
+}
+
+.home-yard-lines {
+  position: absolute;
+  inset: 0;
+  opacity: 0.24;
+  background-image: repeating-linear-gradient(
+    120deg,
+    rgba(27, 93, 56, 0.16) 0,
+    rgba(27, 93, 56, 0.16) 2px,
+    transparent 2px,
+    transparent 30px
+  );
+}
+
+.home-goalpost {
+  position: absolute;
+  right: 8%;
+  top: 14%;
+  width: 9px;
+  height: 108px;
+  border-radius: 6px;
+  opacity: 0.76;
+  background: #efbf43;
+  box-shadow:
+    0 -54px 0 0 #efbf43,
+    -40px -54px 0 0 #efbf43,
+    40px -54px 0 0 #efbf43;
+}
+
+.home-football {
+  position: absolute;
+  width: 40px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #7e411f, #532611);
+  border: 2px solid #331509;
+  box-shadow: 0 6px 14px rgba(52, 22, 10, 0.24);
+}
+
+.home-football::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 12px;
+  height: 2px;
+  transform: translate(-50%, -50%);
+  border-radius: 2px;
+  background: #f4e2cb;
+  box-shadow: -4px 0 0 #f4e2cb, 4px 0 0 #f4e2cb;
+}
+
+.home-football.ball-a {
+  left: -8%;
+  bottom: 11%;
+  animation: home-ball-shot-a 10s linear infinite;
+}
+
+.home-football.ball-b {
+  left: 10%;
+  bottom: -5%;
+  opacity: 0.66;
+  transform: scale(0.82);
+  animation: home-ball-shot-b 13s linear infinite;
+}
+
+.home-football.ball-c {
+  left: -9%;
+  top: 42%;
+  opacity: 0.52;
+  transform: scale(0.72);
+  animation: home-ball-shot-c 14s linear infinite;
+}
+
+.home-suggestion-trace {
+  position: absolute;
+  left: 2%;
+  bottom: 3%;
+  z-index: 1;
+  padding: 0.35rem 0.62rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  color: #fff;
+  background: linear-gradient(135deg, #e87122, #b55315);
+  box-shadow: 0 6px 16px rgba(87, 35, 8, 0.26);
+  animation: home-suggestion-shot 9s ease-in-out infinite;
+}
+
+@keyframes home-ball-shot-a {
+  0% { transform: translate(0, 0) rotate(0deg); opacity: 0; }
+  10% { opacity: 0.95; }
+  60% { opacity: 0.88; }
+  100% { transform: translate(116vw, -60vh) rotate(530deg); opacity: 0; }
+}
+
+@keyframes home-ball-shot-b {
+  0% { transform: translate(0, 0) rotate(0deg) scale(0.82); opacity: 0; }
+  16% { opacity: 0.78; }
+  60% { opacity: 0.66; }
+  100% { transform: translate(88vw, -50vh) rotate(440deg) scale(0.82); opacity: 0; }
+}
+
+@keyframes home-ball-shot-c {
+  0% { transform: translate(0, 0) rotate(0deg) scale(0.72); opacity: 0; }
+  20% { opacity: 0.62; }
+  100% { transform: translate(104vw, -42vh) rotate(350deg) scale(0.72); opacity: 0; }
+}
+
+@keyframes home-suggestion-shot {
+  0% { transform: translate(0, 0) scale(1); opacity: 0; }
+  10% { opacity: 1; }
+  55% { transform: translate(44vw, -26vh) scale(1); opacity: 0.95; }
+  100% { transform: translate(90vw, -56vh) scale(0.84); opacity: 0; }
+}
+
+@keyframes home-suggestion-shot-mobile {
+  0% { transform: translate(0, 0) scale(1); opacity: 0; }
+  12% { opacity: 1; }
+  100% { transform: translate(76vw, -48vh) scale(0.86); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-football,
+  .home-suggestion-trace {
+    animation: none !important;
+    opacity: 0.36;
+  }
 }
 
 .home-connect-form {
@@ -2199,6 +2355,35 @@ button:disabled,
 
   .home-connect-form .secondary-btn {
     width: 100%;
+  }
+
+  .home-hero {
+    min-height: 460px;
+  }
+
+  .home-goalpost {
+    top: 11%;
+    right: 6%;
+    height: 92px;
+    box-shadow:
+      0 -46px 0 0 #efbf43,
+      -33px -46px 0 0 #efbf43,
+      33px -46px 0 0 #efbf43;
+  }
+
+  .home-football {
+    width: 34px;
+    height: 20px;
+  }
+
+  .home-football.ball-b,
+  .home-football.ball-c {
+    display: none;
+  }
+
+  .home-suggestion-trace {
+    font-size: 0.66rem;
+    animation: home-suggestion-shot-mobile 8s ease-in-out infinite;
   }
 
   .intel-connect-form,
