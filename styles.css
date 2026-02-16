@@ -1012,6 +1012,163 @@ h3 {
   min-height: 150px;
 }
 
+.home-chaos-band {
+  position: relative;
+  height: 72px;
+  margin: -0.26rem 0 0.14rem;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.band-route {
+  position: absolute;
+  border: 2px dashed rgba(247, 244, 232, 0.72);
+  border-radius: 999px;
+  opacity: 0.58;
+}
+
+.band-route.route-a {
+  width: 220px;
+  height: 88px;
+  left: 6%;
+  top: -20px;
+  clip-path: polygon(0 62%, 100% 62%, 100% 100%, 0 100%);
+  transform: rotate(-3deg);
+  animation: band-route-fade 4.8s ease-in-out infinite;
+}
+
+.band-route.route-b {
+  width: 220px;
+  height: 88px;
+  right: 8%;
+  top: 10px;
+  clip-path: polygon(0 0, 100% 0, 100% 42%, 0 42%);
+  transform: rotate(4deg);
+  animation: band-route-fade 5.2s ease-in-out infinite 0.6s;
+}
+
+.band-route.route-c {
+  width: 190px;
+  height: 74px;
+  left: 14%;
+  top: 6px;
+  clip-path: polygon(0 0, 84% 0, 84% 44%, 0 44%);
+  transform: rotate(2deg);
+  animation: band-route-fade 4.6s ease-in-out infinite;
+}
+
+.band-route.route-d {
+  width: 240px;
+  height: 90px;
+  right: 16%;
+  top: -16px;
+  clip-path: polygon(16% 56%, 100% 56%, 100% 100%, 16% 100%);
+  transform: rotate(-5deg);
+  animation: band-route-fade 5.4s ease-in-out infinite 1s;
+}
+
+.band-football {
+  position: absolute;
+  width: 30px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #874320, #50240f);
+  border: 2px solid #35180a;
+  box-shadow: 0 5px 10px rgba(42, 19, 9, 0.26);
+}
+
+.band-football::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 8px;
+  height: 2px;
+  transform: translate(-50%, -50%);
+  border-radius: 2px;
+  background: #f4e2cb;
+  box-shadow: -3px 0 0 #f4e2cb, 3px 0 0 #f4e2cb;
+}
+
+.band-football.f1 {
+  left: -40px;
+  bottom: 8px;
+  animation: band-ball-rise-a 7.5s linear infinite;
+}
+
+.band-football.f2 {
+  left: 18%;
+  bottom: -10px;
+  opacity: 0.7;
+  transform: scale(0.84);
+  animation: band-ball-rise-b 9.2s linear infinite;
+}
+
+.band-football.f3 {
+  right: -40px;
+  top: 2px;
+  opacity: 0.78;
+  animation: band-ball-rise-c 8.4s linear infinite;
+}
+
+.band-football.f4 {
+  left: -40px;
+  top: 36px;
+  opacity: 0.66;
+  transform: scale(0.8);
+  animation: band-ball-rise-d 10.5s linear infinite;
+}
+
+.band-callout {
+  position: absolute;
+  right: 4%;
+  bottom: 6px;
+  padding: 0.2rem 0.52rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: linear-gradient(135deg, #e87122, #b55315);
+  box-shadow: 0 5px 12px rgba(81, 33, 8, 0.22);
+  animation: band-callout-pulse 4s ease-in-out infinite;
+}
+
+@keyframes band-route-fade {
+  0%, 100% { opacity: 0.26; }
+  50% { opacity: 0.68; }
+}
+
+@keyframes band-ball-rise-a {
+  0% { transform: translate(0, 0) rotate(0deg); opacity: 0; }
+  14% { opacity: 0.95; }
+  100% { transform: translate(118vw, -42px) rotate(420deg); opacity: 0; }
+}
+
+@keyframes band-ball-rise-b {
+  0% { transform: translate(0, 0) rotate(0deg) scale(0.84); opacity: 0; }
+  16% { opacity: 0.76; }
+  100% { transform: translate(84vw, -58px) rotate(330deg) scale(0.84); opacity: 0; }
+}
+
+@keyframes band-ball-rise-c {
+  0% { transform: translate(0, 0) rotate(0deg); opacity: 0; }
+  16% { opacity: 0.82; }
+  100% { transform: translate(-112vw, 42px) rotate(-390deg); opacity: 0; }
+}
+
+@keyframes band-ball-rise-d {
+  0% { transform: translate(0, 0) rotate(0deg) scale(0.8); opacity: 0; }
+  20% { opacity: 0.7; }
+  100% { transform: translate(120vw, -30px) rotate(300deg) scale(0.8); opacity: 0; }
+}
+
+@keyframes band-callout-pulse {
+  0%, 100% { transform: translateY(0); opacity: 0.7; }
+  50% { transform: translateY(-4px); opacity: 1; }
+}
+
 .intel-connect-form {
   margin-top: 1rem;
   display: grid;
@@ -2552,6 +2709,30 @@ button:disabled,
 
   .home-chaos-glow {
     opacity: 0.28;
+  }
+
+  .home-chaos-band {
+    height: 56px;
+  }
+
+  .band-route.route-b,
+  .band-route.route-d,
+  .band-football.f2,
+  .band-football.f4,
+  .band-callout {
+    display: none;
+  }
+
+  .band-route.route-a {
+    left: 2%;
+    width: 150px;
+    height: 68px;
+  }
+
+  .band-route.route-c {
+    left: 8%;
+    width: 140px;
+    height: 58px;
   }
 
   .home-suggestion-trace {
