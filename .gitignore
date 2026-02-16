@@ -9,3 +9,4 @@ src/frontend/dist/
 .pytest_cache/
 playwright-report/
 test-results/
+claw_bridge.py
