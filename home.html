@@ -31,49 +31,29 @@
       </nav>
     </header>
 
-    <main class="site-shell home-shell">
-      <section class="hero-panel fade-in home-hero">
-        <div class="home-hero-scene" aria-hidden="true">
-          <div class="home-field-glow"></div>
-          <div class="home-chaos-glow"></div>
-          <div class="home-yard-lines"></div>
-          <div class="home-play-routes route-1"></div>
-          <div class="home-play-routes route-2"></div>
-          <div class="home-play-routes route-3"></div>
-          <div class="home-play-node node-1"></div>
-          <div class="home-play-node node-2"></div>
-          <div class="home-play-node node-3"></div>
-          <div class="home-play-node node-4"></div>
-          <div class="home-goalpost"></div>
-          <div class="home-football ball-a"></div>
-          <div class="home-football ball-b"></div>
-          <div class="home-football ball-c"></div>
-          <div class="home-football ball-d"></div>
-          <div class="home-football ball-e"></div>
-          <div class="home-drift d1"></div>
-          <div class="home-drift d2"></div>
-          <div class="home-drift d3"></div>
-          <div class="home-suggestion-trace">Potential Suggestion</div>
+    <main class="site-shell home-shell home-redo">
+      <section class="hero-panel fade-in home-kickoff">
+        <div class="home-kickoff-scene" aria-hidden="true">
+          <div class="chalk-grid"></div>
+          <div class="chalk-route c-route-a"></div>
+          <div class="chalk-route c-route-b"></div>
+          <div class="chalk-route c-route-c"></div>
+          <div class="chalk-ball c-ball-a"></div>
+          <div class="chalk-ball c-ball-b"></div>
+          <div class="chalk-ball c-ball-c"></div>
         </div>
-        <p class="eyebrow">FOURTH DOWN LABS</p>
-        <h1>Your dynasty lab. Stack the stats. Make the call.</h1>
+        <p class="eyebrow">FANTASY FOOTBALL LAB CLASSROOM</p>
+        <h1>Built for the manager who doomscrolls Reddit, then wins waivers.</h1>
         <p class="subhead">
-          Build custom screens, scout leaguemate behavior, and share screenshot-ready intel without creating an account.
+          Chalkboard strategy, post-it chaos, and one-click tools for lineup edges, trade leverage, and leaguemate scouting.
         </p>
-        <div class="hero-actions">
-          <a class="primary-btn hero-btn" href="./lab.html">Open the Lab</a>
-          <form id="home-connect-form" class="home-connect-form">
-            <label>
-              Sleeper Username
-              <input id="home-sleeper-username" placeholder="e.g. soham123" />
-            </label>
-            <button id="home-connect-btn" class="secondary-btn" type="submit">Connect Sleeper</button>
-          </form>
+        <div class="home-jump-row">
+          <a class="chip home-jump" href="#jump-lab">Start In The Lab</a>
+          <a class="chip home-jump" href="#jump-intel">Scout League Intel</a>
+          <a class="chip home-jump" href="#jump-connect">Connect Sleeper</a>
         </div>
-        <p id="home-connect-status" class="hint"></p>
       </section>
 
-      <div class="hand-divider" aria-hidden="true"></div>
       <div class="home-chaos-band band-one" aria-hidden="true">
         <div class="band-route route-a"></div>
         <div class="band-route route-b"></div>
@@ -81,15 +61,30 @@
         <div class="band-football f2"></div>
       </div>
 
-      <section class="panel home-about-panel">
-        <h2>What Is This?</h2>
-        <p>
-          A customizable dynasty player database built for serious fantasy managers. Filter any stat, find leverage, and profile your league before they make the next move.
-        </p>
-        <p>Built by a dynasty manager, not a startup.</p>
+      <section id="jump-lab" class="panel home-lanes">
+        <h2>Pick Your Drive</h2>
+        <div class="feature-grid home-drive-grid">
+          <article class="feature-card sticky-card">
+            <p class="sticky-tag">FASTEST PATH</p>
+            <h3>Open The Lab</h3>
+            <p>Build filters in 30 seconds, save a view, and screenshot your board for league chat.</p>
+            <a class="primary-btn home-card-btn" href="./lab.html">Go To Lab</a>
+          </article>
+          <article class="feature-card sticky-card alt-note">
+            <p class="sticky-tag">SCOUT MODE</p>
+            <h3>League Intel</h3>
+            <p>Profile manager behavior, identify pressure points, and prep offers before rivals do.</p>
+            <a class="secondary-btn home-card-btn" href="./league-intel.html">Open Intel</a>
+          </article>
+          <article class="feature-card sticky-card chalk-note">
+            <p class="sticky-tag">WEEKLY FLOW</p>
+            <h3>Suggested Routine</h3>
+            <p>Tue: waivers. Thu: leverage check. Sat: lineup pivots. Sun: post results receipts.</p>
+            <p class="home-note-meta">Keep it simple. Repeat. Edge compounds.</p>
+          </article>
+        </div>
       </section>
 
-      <div class="hand-divider" aria-hidden="true"></div>
       <div class="home-chaos-band band-two" aria-hidden="true">
         <div class="band-route route-c"></div>
         <div class="band-route route-d"></div>
@@ -98,22 +93,39 @@
         <div class="band-callout">Breakout Lane</div>
       </div>
 
-      <section class="feature-grid home-feature-grid">
-        <article class="feature-card">
-          <h3>The Lab</h3>
-          <p>Stack any metric combo, sort instantly, and save shareable view links.</p>
-        </article>
-        <article class="feature-card">
-          <h3>League Intel</h3>
-          <p>Scout manager behavior, trade style tags, and positional weaknesses.</p>
-        </article>
-        <article class="feature-card">
-          <h3>Open Source Data</h3>
-          <p>Sleeper API plus live stat sync, no auth wall and no account friction.</p>
-        </article>
-        <article class="feature-card">
-          <h3>hey baby you're cute</h3>
-        </article>
+      <section id="jump-intel" class="panel home-board">
+        <h2>Locker-Room Board</h2>
+        <div class="home-board-grid">
+          <article class="mini-card board-note">
+            <h3>Trade Prep</h3>
+            <p>Check contenders who are thin at RB/TE before sending your first offer.</p>
+          </article>
+          <article class="mini-card board-note">
+            <h3>Waiver Angles</h3>
+            <p>Use filter combos to spot role growth before consensus rankings catch up.</p>
+          </article>
+          <article class="mini-card board-note">
+            <h3>Bye-Week Pain</h3>
+            <p>Find managers forced into short-term moves and buy long-term assets.</p>
+          </article>
+          <article class="mini-card board-note">
+            <h3>Receipts Folder</h3>
+            <p>Save shareable view links and keep evidence for every prediction you post.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="jump-connect" class="panel home-connect-panel">
+        <h2>Connect Sleeper</h2>
+        <p class="subhead">No auth wall. Drop your username and load your leagues instantly.</p>
+        <form id="home-connect-form" class="home-connect-form">
+          <label>
+            Sleeper Username
+            <input id="home-sleeper-username" placeholder="e.g. soham123" />
+          </label>
+          <button id="home-connect-btn" class="primary-btn" type="submit">Connect Sleeper</button>
+        </form>
+        <p id="home-connect-status" class="hint"></p>
       </section>
     </main>
 
