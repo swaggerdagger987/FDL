@@ -3,94 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Fourth Down Labs | Home</title>
-    <meta
-      name="description"
-      content="Fourth Down Labs is a Sleeper-first dynasty football lab for custom player screening and league intelligence."
-    />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="./styles.css" />
+    <title>Redirecting To Home...</title>
+    <meta http-equiv="refresh" content="0; url=./home.html" />
+    <script>
+      window.location.replace(`./home.html${window.location.search}${window.location.hash}`);
+    </script>
   </head>
   <body>
-    <div class="ambient-backdrop" aria-hidden="true"></div>
-
-    <header class="site-header">
-      <a class="brand" href="./index.html">
-        <span class="brand-dot"></span>
-        Fourth Down Labs
-      </a>
-      <nav class="main-nav" aria-label="Primary">
-        <a class="nav-link" data-nav-page="lab" href="./lab.html">Open the Lab</a>
-        <a class="nav-link" data-nav-page="intel" href="./league-intel.html">League Intel</a>
-        <button id="connect-sleeper-btn" class="nav-cta nav-connect-btn" type="button">Connect Sleeper</button>
-      </nav>
-    </header>
-
-    <main class="site-shell home-shell">
-      <section class="hero-panel fade-in home-hero">
-        <div class="home-hero-scene" aria-hidden="true">
-          <div class="home-field-glow"></div>
-          <div class="home-yard-lines"></div>
-          <div class="home-goalpost"></div>
-          <div class="home-football ball-a"></div>
-          <div class="home-football ball-b"></div>
-          <div class="home-football ball-c"></div>
-          <div class="home-suggestion-trace">Potential Suggestion</div>
-        </div>
-        <p class="eyebrow">FOURTH DOWN LABS</p>
-        <h1>Your dynasty lab. Stack the stats. Make the call.</h1>
-        <p class="subhead">
-          Build custom screens, scout leaguemate behavior, and share screenshot-ready intel without creating an account.
-        </p>
-        <div class="hero-actions">
-          <a class="primary-btn hero-btn" href="./lab.html">Open the Lab</a>
-          <form id="home-connect-form" class="home-connect-form">
-            <label>
-              Sleeper Username
-              <input id="home-sleeper-username" placeholder="e.g. soham123" />
-            </label>
-            <button id="home-connect-btn" class="secondary-btn" type="submit">Connect Sleeper</button>
-          </form>
-        </div>
-        <p id="home-connect-status" class="hint"></p>
-      </section>
-
-      <div class="hand-divider" aria-hidden="true"></div>
-
-      <section class="panel home-about-panel">
-        <h2>What Is This?</h2>
-        <p>
-          A customizable dynasty player database built for serious fantasy managers. Filter any stat, find leverage, and profile your league before they make the next move.
-        </p>
-        <p>Built by a dynasty manager, not a startup.</p>
-      </section>
-
-      <div class="hand-divider" aria-hidden="true"></div>
-
-      <section class="feature-grid home-feature-grid">
-        <article class="feature-card">
-          <h3>The Lab</h3>
-          <p>Stack any metric combo, sort instantly, and save shareable view links.</p>
-        </article>
-        <article class="feature-card">
-          <h3>League Intel</h3>
-          <p>Scout manager behavior, trade style tags, and positional weaknesses.</p>
-        </article>
-        <article class="feature-card">
-          <h3>Open Source Data</h3>
-          <p>Sleeper API plus live stat sync, no auth wall and no account friction.</p>
-        </article>
-        <article class="feature-card">
-          <h3>hey baby you're cute</h3>
-        </article>
-      </section>
-    </main>
-
-    <script type="module" src="./home.js"></script>
+    <p>Redirecting to <a href="./home.html">Home</a>...</p>
   </body>
 </html>

@@ -12,21 +12,23 @@ import live_data
 
 BASE_DIR = Path(__file__).resolve().parent
 LEGACY_REDIRECTS = {
-    "/index": "/index.html",
+    "/index": "/home.html",
+    "/index.html": "/home.html",
+    "/home": "/home.html",
     "/lab": "/lab.html",
     "/league-intel": "/league-intel.html",
     "/screener": "/lab.html",
     "/screener.html": "/lab.html",
     "/terminal": "/league-intel.html",
     "/terminal.html": "/league-intel.html",
-    "/mission": "/index.html",
-    "/mission.html": "/index.html",
-    "/modules": "/index.html",
-    "/modules.html": "/index.html",
-    "/pricing": "/index.html",
-    "/pricing.html": "/index.html",
-    "/roadmap": "/index.html",
-    "/roadmap.html": "/index.html",
+    "/mission": "/home.html",
+    "/mission.html": "/home.html",
+    "/modules": "/home.html",
+    "/modules.html": "/home.html",
+    "/pricing": "/home.html",
+    "/pricing.html": "/home.html",
+    "/roadmap": "/home.html",
+    "/roadmap.html": "/home.html",
 }
 SYNC_STATE_LOCK = threading.Lock()
 SYNC_THREAD = None
@@ -144,7 +146,7 @@ class TerminalRequestHandler(SimpleHTTPRequestHandler):
 
         target_path = parsed.path or "/"
         if target_path == "/":
-            target_path = "/index.html"
+            target_path = "/home.html"
         if target_path in LEGACY_REDIRECTS:
             return False
 
@@ -189,7 +191,7 @@ class TerminalRequestHandler(SimpleHTTPRequestHandler):
             self.redirect_to(redirect_target, parsed.query)
             return
         if parsed.path == "/":
-            self.path = "/index.html"
+            self.path = "/home.html"
         super().do_GET()
 
     def do_HEAD(self):  # noqa: N802
@@ -204,7 +206,7 @@ class TerminalRequestHandler(SimpleHTTPRequestHandler):
             self.redirect_to(redirect_target, parsed.query)
             return
         if parsed.path == "/":
-            self.path = "/index.html"
+            self.path = "/home.html"
         super().do_HEAD()
 
     def do_POST(self):  # noqa: N802

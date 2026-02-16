@@ -1,13 +1,12 @@
 # Deployment Guide (Render, Free-First)
 
 This repo is configured for Render Blueprint deploys via `/Users/sohammehta/Documents/New project/render.yaml`.
-For parallel v2 cutover, use `/Users/sohammehta/Documents/New project/render-v2.yaml`.
 
 ## Current Production IA
 
 Deployed app should expose:
 
-- `/index.html` (Home)
+- `/home.html` (Home)
 - `/lab.html` (The Lab)
 - `/league-intel.html` (League Intel)
 
@@ -84,19 +83,4 @@ Mitigation already in place:
 
 For durable persistence and faster warm starts, move to managed storage in a future pass.
 
-## Parallel V2 Deployment
 
-The rewrite stack can be deployed in parallel as a second web service.
-
-1. Keep the current service on `render.yaml` for legacy traffic.
-2. Create a second Render web service using `render-v2.yaml`.
-3. Validate:
-   - `/api/v2/health`
-   - `/api/v2/docs`
-   - `/v2`
-4. Recommended env for v2 service:
-   - `FDL_V2_AUTO_SYNC_ON_START=1`
-   - `FDL_V2_AUTO_SYNC_INCLUDE_NFLVERSE=0`
-   - `FDL_REQUEST_BODY_LIMIT_BYTES=10485760`
-   - `FDL_CORS_ALLOW_ORIGINS=https://<your-frontend-origin>`
-5. After parity QA, switch traffic gradually to v2.

@@ -19,15 +19,3 @@ jobs:
           pip install -r requirements.txt
       - name: Run backend tests
         run: make test
-
-  frontend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-      - name: Build frontend
-        run: |
-          npm --prefix src/frontend install
-          npm --prefix src/frontend run build
