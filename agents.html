@@ -18,16 +18,92 @@
     <style>
       .agents-frame-wrap {
         border: 1px solid rgba(255, 255, 255, 0.16);
-        min-height: 74vh;
+        min-height: clamp(560px, 82vh, 980px);
+        height: clamp(560px, 82vh, 980px);
         overflow: hidden;
+        position: relative;
+        border-radius: 14px;
+        background: linear-gradient(160deg, rgba(14, 14, 28, 0.95), rgba(8, 8, 16, 0.9));
       }
 
       .agents-frame-wrap iframe {
         width: 100%;
-        min-height: 74vh;
+        height: 100%;
         border: 0;
         display: block;
         background: #111;
+      }
+
+      .agents-overlay {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .agents-dpad {
+        position: absolute;
+        right: clamp(10px, 2vw, 20px);
+        bottom: clamp(10px, 2vw, 20px);
+        display: grid;
+        grid-template-columns: 52px 52px 52px;
+        grid-template-rows: 52px 52px 52px;
+        gap: 6px;
+        pointer-events: auto;
+      }
+
+      .dpad-btn {
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        border-radius: 8px;
+        background: linear-gradient(180deg, rgba(36, 36, 48, 0.92), rgba(20, 20, 30, 0.94));
+        color: rgba(255, 255, 255, 0.88);
+        font-size: 22px;
+        font-weight: 700;
+        line-height: 1;
+        cursor: pointer;
+        user-select: none;
+        touch-action: none;
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.35);
+      }
+
+      .dpad-btn:active,
+      .dpad-btn.is-active {
+        transform: translateY(1px);
+        background: linear-gradient(180deg, rgba(78, 104, 170, 0.9), rgba(48, 70, 126, 0.92));
+      }
+
+      .dpad-up {
+        grid-column: 2;
+        grid-row: 1;
+      }
+
+      .dpad-left {
+        grid-column: 1;
+        grid-row: 2;
+      }
+
+      .dpad-right {
+        grid-column: 3;
+        grid-row: 2;
+      }
+
+      .dpad-down {
+        grid-column: 2;
+        grid-row: 3;
+      }
+
+      .dpad-center {
+        grid-column: 2;
+        grid-row: 2;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 8px;
+        background: rgba(22, 22, 34, 0.7);
+      }
+
+      @media (max-width: 900px) {
+        .agents-frame-wrap {
+          min-height: 72vh;
+          height: 72vh;
+        }
       }
     </style>
   </head>
@@ -62,14 +138,24 @@
       <section class="panel data-panel">
         <div class="agents-frame-wrap">
           <iframe
+            id="agents-iframe"
             src="./pixel-agents/index.html"
             title="Fourth Down Labs Pixel Agents"
             loading="lazy"
             referrerpolicy="no-referrer"
           ></iframe>
+          <div class="agents-overlay" aria-hidden="true">
+            <div class="agents-dpad" id="agents-dpad">
+              <button class="dpad-btn dpad-up" type="button" data-dir="up" aria-label="Move up">▲</button>
+              <button class="dpad-btn dpad-left" type="button" data-dir="left" aria-label="Move left">◀</button>
+              <div class="dpad-center"></div>
+              <button class="dpad-btn dpad-right" type="button" data-dir="right" aria-label="Move right">▶</button>
+              <button class="dpad-btn dpad-down" type="button" data-dir="down" aria-label="Move down">▼</button>
+            </div>
+          </div>
         </div>
         <p id="agents-status" class="hint">
-          Running inside FDL. API keys entered in the panel are stored in browser local storage for this origin.
+          Running inside FDL. Click an avatar and drag to move, or use the on-screen arrows. API keys entered in the panel are stored in browser local storage for this origin.
         </p>
       </section>
     </main>
