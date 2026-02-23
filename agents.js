@@ -108,6 +108,7 @@ function setupAgentControls() {
       return;
     }
     frameWin.__fdlAgentsEnhanced = true;
+    injectComicLabelStyles(frameDoc);
     let panState = null;
 
     function isInsideInputUi(target) {
@@ -184,7 +185,10 @@ function setupAgentControls() {
     });
 
     pinPersonalityPanel(frameDoc);
-    const observer = new MutationObserver(() => pinPersonalityPanel(frameDoc));
+    const observer = new MutationObserver(() => {
+      pinPersonalityPanel(frameDoc);
+      injectComicLabelStyles(frameDoc);
+    });
     observer.observe(frameDoc.body, { childList: true, subtree: true });
   }
 
@@ -220,5 +224,33 @@ function pinPersonalityPanel(frameDoc) {
   panel.style.maxHeight = "34%";
   panel.style.overflow = "auto";
   panel.style.zIndex = "130";
+}
+
+function injectComicLabelStyles(frameDoc) {
+  if (frameDoc.getElementById("fdl-comic-agent-labels")) {
+    return;
+  }
+
+  const style = frameDoc.createElement("style");
+  style.id = "fdl-comic-agent-labels";
+  style.textContent = `
+    div[style*="pointer-events: none"][style*="z-index: 40"][style*="translateX(-50%)"] > span {
+      background: #ffffff !important;
+      color: #131313 !important;
+      border: 2px solid #111111 !important;
+      border-radius: 4px !important;
+      box-shadow: 2px 2px 0 #111111 !important;
+      text-shadow: none !important;
+      font-weight: 700 !important;
+      letter-spacing: 0.01em !important;
+    }
+
+    div[style*="pointer-events: none"][style*="z-index: 40"][style*="translateX(-50%)"] > span + span {
+      margin-top: 3px !important;
+      opacity: 1 !important;
+      font-weight: 600 !important;
+    }
+  `;
+  frameDoc.head.appendChild(style);
 }
 
