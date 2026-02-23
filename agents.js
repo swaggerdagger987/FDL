@@ -234,6 +234,15 @@ function injectComicLabelStyles(frameDoc) {
   const style = frameDoc.createElement("style");
   style.id = "fdl-comic-agent-labels";
   style.textContent = `
+    div[style*="pointer-events: none"][style*="z-index: 40"][style*="translateX(-50%)"] {
+      transform: translateX(18px) !important;
+    }
+
+    div[style*="transform:translateX(-50%)"][style*="--pixel-overlay-selected-z"],
+    div[style*="transform: translateX(-50%)"][style*="--pixel-overlay-selected-z"] {
+      transform: translateX(18px) !important;
+    }
+
     div[style*="pointer-events: none"][style*="z-index: 40"][style*="translateX(-50%)"] > span {
       background: #ffffff !important;
       color: #131313 !important;
