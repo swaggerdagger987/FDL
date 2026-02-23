@@ -28,10 +28,15 @@ function setupAgentControls() {
     return iframe.contentWindow || null;
   }
 
+  function getFrameDocument() {
+    return iframe.contentWindow?.document || null;
+  }
+
   function dispatchKey(direction, type) {
     const frameWin = getFrameWindow();
+    const frameDoc = getFrameDocument();
     const key = keyMap[direction];
-    if (!frameWin || !key) {
+    if (!frameWin || !frameDoc || !key) {
       return;
     }
 
@@ -42,7 +47,7 @@ function setupAgentControls() {
       cancelable: true,
     });
 
-    frameWin.document.dispatchEvent(event);
+    frameDoc.dispatchEvent(event);
     frameWin.dispatchEvent(event);
   }
 
@@ -96,81 +101,124 @@ function setupAgentControls() {
 
   window.addEventListener("blur", stopAllKeyPresses);
 
-  const wrap = iframe.closest(".agents-frame-wrap");
-  let dragState = null;
-
-  function toFramePoint(clientX, clientY) {
-    const rect = iframe.getBoundingClientRect();
-    return {
-      x: Math.max(0, Math.min(rect.width - 1, clientX - rect.left)),
-      y: Math.max(0, Math.min(rect.height - 1, clientY - rect.top)),
-    };
-  }
-
-  function dispatchPointerLike(type, clientX, clientY) {
+  function enhanceFrameUi() {
     const frameWin = getFrameWindow();
-    const frameDoc = frameWin?.document;
-    if (!frameWin || !frameDoc) {
+    const frameDoc = getFrameDocument();
+    if (!frameWin || !frameDoc || frameWin.__fdlAgentsEnhanced) {
       return;
     }
+    frameWin.__fdlAgentsEnhanced = true;
+    let panState = null;
 
-    const point = toFramePoint(clientX, clientY);
-    const target =
-      frameDoc.elementFromPoint(point.x, point.y) ||
-      frameDoc.querySelector("canvas") ||
-      frameDoc.body;
-
-    if (!target) {
-      return;
+    function isInsideInputUi(target) {
+      if (!(target instanceof frameWin.Element)) {
+        return false;
+      }
+      const panel = findPersonalityPanel(frameDoc);
+      if (panel && panel.contains(target)) {
+        return true;
+      }
+      return Boolean(target.closest("input, textarea, button, select, label"));
     }
 
-    const common = {
-      bubbles: true,
-      cancelable: true,
-      clientX: point.x,
-      clientY: point.y,
-      button: 0,
-      buttons: type === "mouseup" ? 0 : 1,
+    function findWorldCanvas() {
+      return frameDoc.querySelector("canvas");
+    }
+
+    function dispatchPanMouse(type, sourceEvent, canvas) {
+      const mouseEvent = new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        clientX: sourceEvent.clientX,
+        clientY: sourceEvent.clientY,
+        button: type === "mouseup" ? 1 : 1,
+        buttons: type === "mouseup" ? 0 : 4,
+      });
+      canvas.dispatchEvent(mouseEvent);
+    }
+
+    frameDoc.addEventListener("pointerdown", (event) => {
+      if (isInsideInputUi(event.target)) {
+        return;
+      }
+      const canvas = findWorldCanvas();
+      if (!canvas) {
+        return;
+      }
+      if (!(event.target instanceof frameWin.Element) || !canvas.contains(event.target)) {
+        return;
+      }
+
+      panState = {
+        pointerId: event.pointerId,
+        canvas,
+      };
+      dispatchPanMouse("mousedown", event, canvas);
+      event.preventDefault();
+      event.stopPropagation();
+    }, true);
+
+    frameDoc.addEventListener("pointermove", (event) => {
+      if (!panState || panState.pointerId !== event.pointerId) {
+        return;
+      }
+      dispatchPanMouse("mousemove", event, panState.canvas);
+      event.preventDefault();
+      event.stopPropagation();
+    }, true);
+
+    const endPan = (event) => {
+      if (!panState || panState.pointerId !== event.pointerId) {
+        return;
+      }
+      dispatchPanMouse("mouseup", event, panState.canvas);
+      panState = null;
+      event.preventDefault();
+      event.stopPropagation();
     };
 
-    target.dispatchEvent(new MouseEvent(type, common));
-    if (type === "mousedown") {
-      target.dispatchEvent(new PointerEvent("pointerdown", { ...common, pointerId: 1, pointerType: "mouse", isPrimary: true }));
-    } else if (type === "mousemove") {
-      target.dispatchEvent(new PointerEvent("pointermove", { ...common, pointerId: 1, pointerType: "mouse", isPrimary: true }));
-    } else if (type === "mouseup") {
-      target.dispatchEvent(new PointerEvent("pointerup", { ...common, pointerId: 1, pointerType: "mouse", isPrimary: true }));
+    frameDoc.addEventListener("pointerup", endPan, true);
+    frameDoc.addEventListener("pointercancel", endPan, true);
+    frameWin.addEventListener("blur", () => {
+      panState = null;
+    });
+
+    pinPersonalityPanel(frameDoc);
+    const observer = new MutationObserver(() => pinPersonalityPanel(frameDoc));
+    observer.observe(frameDoc.body, { childList: true, subtree: true });
+  }
+
+  iframe.addEventListener("load", enhanceFrameUi);
+  enhanceFrameUi();
+}
+
+function findPersonalityPanel(frameDoc) {
+  const divs = frameDoc.querySelectorAll("div");
+  for (const div of divs) {
+    if (!div.textContent?.includes("Agent Personalities")) {
+      continue;
+    }
+    const panel = div.closest("div");
+    if (panel && panel.style.position === "absolute") {
+      return panel;
     }
   }
+  return null;
+}
 
-  if (wrap) {
-    wrap.addEventListener("pointerdown", (event) => {
-      if (event.target.closest("#agents-dpad")) {
-        return;
-      }
-      dragState = { pointerId: event.pointerId };
-      iframe.focus();
-      dispatchPointerLike("mousedown", event.clientX, event.clientY);
-    });
-
-    wrap.addEventListener("pointermove", (event) => {
-      if (!dragState || dragState.pointerId !== event.pointerId) {
-        return;
-      }
-      dispatchPointerLike("mousemove", event.clientX, event.clientY);
-    });
-
-    const finishDrag = (event) => {
-      if (!dragState || dragState.pointerId !== event.pointerId) {
-        return;
-      }
-      dispatchPointerLike("mouseup", event.clientX, event.clientY);
-      dragState = null;
-    };
-
-    wrap.addEventListener("pointerup", finishDrag);
-    wrap.addEventListener("pointercancel", finishDrag);
-    wrap.addEventListener("pointerleave", finishDrag);
+function pinPersonalityPanel(frameDoc) {
+  const panel = findPersonalityPanel(frameDoc);
+  if (!panel) {
+    return;
   }
+
+  panel.style.top = "auto";
+  panel.style.right = "12px";
+  panel.style.left = "12px";
+  panel.style.bottom = "12px";
+  panel.style.width = "auto";
+  panel.style.maxHeight = "34%";
+  panel.style.overflow = "auto";
+  panel.style.zIndex = "130";
 }
 

@@ -1,165 +1,311 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Agents | Fourth Down Labs</title>
-    <meta
-      name="description"
-      content="Fourth Down Labs pixel-agent command center with role-based avatars and per-agent API key configuration."
-    />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="./styles.css" />
-    <style>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agents | Fourth Down Labs</title>
+  <meta
+    name="description"
+    content="Fourth Down Labs pixel-agent command center with role-based avatars and per-agent API key configuration."
+  />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Manrope:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+  <style>
+    :root {
+      --agents-bg-1: #091324;
+      --agents-bg-2: #10182d;
+      --agents-bg-3: #1a1020;
+      --agents-cyan: #5ee7ff;
+      --agents-orange: #ff8b57;
+      --agents-card: rgba(10, 18, 34, 0.8);
+      --agents-border: rgba(160, 230, 255, 0.38);
+      --agents-text: #f2f7ff;
+    }
+
+    body {
+      background:
+        radial-gradient(circle at 16% 18%, rgba(94, 231, 255, 0.2), transparent 30%),
+        radial-gradient(circle at 82% 14%, rgba(255, 139, 87, 0.2), transparent 36%),
+        linear-gradient(145deg, var(--agents-bg-1), var(--agents-bg-2) 45%, var(--agents-bg-3));
+      min-height: 100vh;
+      color: var(--agents-text);
+      overflow-x: hidden;
+    }
+
+    .agents-bg-layer {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .agents-bg-layer::before,
+    .agents-bg-layer::after {
+      content: "";
+      position: absolute;
+      width: min(42vw, 480px);
+      aspect-ratio: 1 / 1;
+      border-radius: 50%;
+      filter: blur(48px);
+      opacity: 0.45;
+      animation: agentsFloat 14s ease-in-out infinite;
+    }
+
+    .agents-bg-layer::before {
+      background: rgba(94, 231, 255, 0.45);
+      top: 10%;
+      left: 4%;
+    }
+
+    .agents-bg-layer::after {
+      background: rgba(255, 139, 87, 0.38);
+      right: 4%;
+      bottom: 10%;
+      animation-delay: -7s;
+    }
+
+    @keyframes agentsFloat {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      50% { transform: translate(22px, -16px) scale(1.07); }
+    }
+
+    .site-header,
+    .site-shell {
+      position: relative;
+      z-index: 2;
+    }
+
+    .agents-hero {
+      margin: 26px 0 18px;
+      padding: clamp(20px, 4vw, 38px);
+      border-radius: 22px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background:
+        linear-gradient(130deg, rgba(8, 20, 39, 0.82), rgba(27, 16, 41, 0.7));
+      box-shadow: 0 22px 52px rgba(0, 0, 0, 0.38);
+      backdrop-filter: blur(10px);
+    }
+
+    .agents-kicker {
+      margin: 0 0 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-size: 0.78rem;
+      color: rgba(199, 245, 255, 0.95);
+    }
+
+    .agents-title {
+      margin: 0;
+      font-family: "Bebas Neue", sans-serif;
+      font-size: clamp(2.8rem, 8vw, 5rem);
+      letter-spacing: 0.025em;
+      line-height: 0.95;
+      color: #ecf8ff;
+      text-shadow: 0 0 26px rgba(94, 231, 255, 0.24);
+    }
+
+    .agents-subtitle {
+      margin: 14px 0 0;
+      max-width: 760px;
+      font-family: "Manrope", sans-serif;
+      font-size: clamp(0.96rem, 2.2vw, 1.12rem);
+      color: rgba(234, 240, 255, 0.9);
+      line-height: 1.55;
+    }
+
+    .agents-stage {
+      padding: clamp(10px, 2.5vw, 16px);
+      border-radius: 22px;
+      border: 1px solid var(--agents-border);
+      background: var(--agents-card);
+      box-shadow:
+        0 0 0 1px rgba(94, 231, 255, 0.2) inset,
+        0 20px 50px rgba(0, 0, 0, 0.44);
+      backdrop-filter: blur(8px);
+    }
+
+    .agents-frame-wrap {
+      min-height: clamp(560px, 80vh, 980px);
+      height: clamp(560px, 80vh, 980px);
+      overflow: hidden;
+      position: relative;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: linear-gradient(150deg, rgba(5, 10, 20, 0.98), rgba(18, 22, 30, 0.92));
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.42);
+    }
+
+    .agents-frame-wrap iframe {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+      background: #060912;
+    }
+
+    .agents-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .agents-badge {
+      position: absolute;
+      left: 12px;
+      top: 12px;
+      font-family: "Manrope", sans-serif;
+      font-size: 0.72rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(94, 231, 255, 0.6);
+      background: rgba(7, 20, 34, 0.78);
+      color: rgba(220, 245, 255, 0.96);
+    }
+
+    .agents-dpad {
+      position: absolute;
+      right: clamp(10px, 2vw, 20px);
+      bottom: clamp(10px, 2vw, 20px);
+      display: grid;
+      grid-template-columns: 52px 52px 52px;
+      grid-template-rows: 52px 52px 52px;
+      gap: 6px;
+      pointer-events: auto;
+    }
+
+    .dpad-btn {
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      border-radius: 10px;
+      background: linear-gradient(180deg, rgba(28, 33, 44, 0.94), rgba(11, 15, 24, 0.96));
+      color: rgba(237, 243, 255, 0.9);
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1;
+      cursor: pointer;
+      user-select: none;
+      touch-action: none;
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.36);
+    }
+
+    .dpad-btn:active,
+    .dpad-btn.is-active {
+      transform: translateY(1px);
+      background: linear-gradient(180deg, rgba(94, 231, 255, 0.36), rgba(17, 58, 80, 0.92));
+    }
+
+    .dpad-up { grid-column: 2; grid-row: 1; }
+    .dpad-left { grid-column: 1; grid-row: 2; }
+    .dpad-right { grid-column: 3; grid-row: 2; }
+    .dpad-down { grid-column: 2; grid-row: 3; }
+
+    .dpad-center {
+      grid-column: 2;
+      grid-row: 2;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 10px;
+      background: rgba(15, 18, 28, 0.72);
+    }
+
+    .agents-meta {
+      margin-top: 12px;
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    }
+
+    .agents-chip {
+      font-family: "Manrope", sans-serif;
+      font-size: 0.8rem;
+      letter-spacing: 0.02em;
+      color: rgba(228, 235, 250, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 12px;
+      padding: 9px 11px;
+      background: rgba(9, 14, 26, 0.66);
+    }
+
+    .agents-chip b {
+      color: #dcf7ff;
+      font-weight: 700;
+    }
+
+    #agents-status.hint {
+      margin-top: 12px;
+      font-family: "Manrope", sans-serif;
+      color: rgba(219, 228, 248, 0.85);
+    }
+
+    @media (max-width: 900px) {
       .agents-frame-wrap {
-        border: 1px solid rgba(255, 255, 255, 0.16);
-        min-height: clamp(560px, 82vh, 980px);
-        height: clamp(560px, 82vh, 980px);
-        overflow: hidden;
-        position: relative;
-        border-radius: 14px;
-        background: linear-gradient(160deg, rgba(14, 14, 28, 0.95), rgba(8, 8, 16, 0.9));
+        min-height: 72vh;
+        height: 72vh;
       }
+    }
+  </style>
+</head>
+<body>
+  <div class="agents-bg-layer" aria-hidden="true"></div>
 
-      .agents-frame-wrap iframe {
-        width: 100%;
-        height: 100%;
-        border: 0;
-        display: block;
-        background: #111;
-      }
+  <header class="site-header">
+    <a class="brand" href="./home.html">
+      <span class="brand-dot"></span>
+      Fourth Down Labs
+    </a>
+    <nav class="main-nav" aria-label="Primary">
+      <a class="nav-link" data-nav-page="lab" href="./lab.html">Open the Lab</a>
+      <a class="nav-link" data-nav-page="intel" href="./league-intel.html">League Intel</a>
+      <a class="nav-link" data-nav-page="agents" href="./agents.html">Agents</a>
+      <button id="connect-sleeper-btn" class="nav-cta nav-connect-btn" type="button">Connect Sleeper</button>
+    </nav>
+  </header>
 
-      .agents-overlay {
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-      }
+  <main class="site-shell">
+    <section class="agents-hero fade-in">
+      <p class="agents-kicker">AGENTS COMMAND LAYER</p>
+      <h1 class="agents-title">Six Minds. One War Room.</h1>
+      <p class="agents-subtitle">
+        Hootsworth, Dr. Dolphin, Hawkeye, The Fox, The Octopus, and The Elephant operate in one live tactical map.
+        Pan the world, reposition, and control motion directly from this screen.
+      </p>
+    </section>
 
-      .agents-dpad {
-        position: absolute;
-        right: clamp(10px, 2vw, 20px);
-        bottom: clamp(10px, 2vw, 20px);
-        display: grid;
-        grid-template-columns: 52px 52px 52px;
-        grid-template-rows: 52px 52px 52px;
-        gap: 6px;
-        pointer-events: auto;
-      }
-
-      .dpad-btn {
-        border: 1px solid rgba(255, 255, 255, 0.25);
-        border-radius: 8px;
-        background: linear-gradient(180deg, rgba(36, 36, 48, 0.92), rgba(20, 20, 30, 0.94));
-        color: rgba(255, 255, 255, 0.88);
-        font-size: 22px;
-        font-weight: 700;
-        line-height: 1;
-        cursor: pointer;
-        user-select: none;
-        touch-action: none;
-        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.35);
-      }
-
-      .dpad-btn:active,
-      .dpad-btn.is-active {
-        transform: translateY(1px);
-        background: linear-gradient(180deg, rgba(78, 104, 170, 0.9), rgba(48, 70, 126, 0.92));
-      }
-
-      .dpad-up {
-        grid-column: 2;
-        grid-row: 1;
-      }
-
-      .dpad-left {
-        grid-column: 1;
-        grid-row: 2;
-      }
-
-      .dpad-right {
-        grid-column: 3;
-        grid-row: 2;
-      }
-
-      .dpad-down {
-        grid-column: 2;
-        grid-row: 3;
-      }
-
-      .dpad-center {
-        grid-column: 2;
-        grid-row: 2;
-        border: 1px solid rgba(255, 255, 255, 0.18);
-        border-radius: 8px;
-        background: rgba(22, 22, 34, 0.7);
-      }
-
-      @media (max-width: 900px) {
-        .agents-frame-wrap {
-          min-height: 72vh;
-          height: 72vh;
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="ambient-backdrop" aria-hidden="true"></div>
-
-    <header class="site-header">
-      <a class="brand" href="./home.html">
-        <span class="brand-dot"></span>
-        Fourth Down Labs
-      </a>
-      <nav class="main-nav" aria-label="Primary">
-        <a class="nav-link" data-nav-page="lab" href="./lab.html">Open the Lab</a>
-        <a class="nav-link" data-nav-page="intel" href="./league-intel.html">League Intel</a>
-        <a class="nav-link" data-nav-page="agents" href="./agents.html">Agents</a>
-        <button id="connect-sleeper-btn" class="nav-cta nav-connect-btn" type="button">Connect Sleeper</button>
-      </nav>
-    </header>
-
-    <main class="site-shell">
-      <section class="hero-panel fade-in">
-        <p class="eyebrow">AGENTS</p>
-        <h1>Pixel Agent War Room</h1>
-        <p class="subhead">
-          Six role-based avatars: Hootsworth, Dr. Dolphin, Hawkeye, The Fox, The Octopus, and The Elephant. Each avatar
-          has a dedicated API key/model configuration inside the panel.
-        </p>
-      </section>
-
-      <div class="hand-divider" aria-hidden="true"></div>
-
-      <section class="panel data-panel">
-        <div class="agents-frame-wrap">
-          <iframe
-            id="agents-iframe"
-            src="./pixel-agents/index.html"
-            title="Fourth Down Labs Pixel Agents"
-            loading="lazy"
-            referrerpolicy="no-referrer"
-          ></iframe>
-          <div class="agents-overlay" aria-hidden="true">
-            <div class="agents-dpad" id="agents-dpad">
-              <button class="dpad-btn dpad-up" type="button" data-dir="up" aria-label="Move up">▲</button>
-              <button class="dpad-btn dpad-left" type="button" data-dir="left" aria-label="Move left">◀</button>
-              <div class="dpad-center"></div>
-              <button class="dpad-btn dpad-right" type="button" data-dir="right" aria-label="Move right">▶</button>
-              <button class="dpad-btn dpad-down" type="button" data-dir="down" aria-label="Move down">▼</button>
-            </div>
+    <section class="agents-stage">
+      <div class="agents-frame-wrap">
+        <iframe
+          id="agents-iframe"
+          src="./pixel-agents/index.html"
+          title="Fourth Down Labs Pixel Agents"
+          loading="lazy"
+          referrerpolicy="no-referrer"
+        ></iframe>
+        <div class="agents-overlay" aria-hidden="true">
+          <div class="agents-badge">Live Tactical View</div>
+          <div class="agents-dpad" id="agents-dpad">
+            <button class="dpad-btn dpad-up" type="button" data-dir="up" aria-label="Move up">▲</button>
+            <button class="dpad-btn dpad-left" type="button" data-dir="left" aria-label="Move left">◀</button>
+            <div class="dpad-center"></div>
+            <button class="dpad-btn dpad-right" type="button" data-dir="right" aria-label="Move right">▶</button>
+            <button class="dpad-btn dpad-down" type="button" data-dir="down" aria-label="Move down">▼</button>
           </div>
         </div>
-        <p id="agents-status" class="hint">
-          Running inside FDL. Click an avatar and drag to move, or use the on-screen arrows. API keys entered in the panel are stored in browser local storage for this origin.
-        </p>
-      </section>
-    </main>
+      </div>
 
-    <script type="module" src="./agents.js"></script>
-  </body>
+      <div class="agents-meta" aria-hidden="true">
+        <div class="agents-chip"><b>Drag Map:</b> click-drag directly in world space</div>
+        <div class="agents-chip"><b>Avatar Move:</b> use directional controls at bottom-right</div>
+        <div class="agents-chip"><b>Prompt Panel:</b> pinned below world for less clutter</div>
+      </div>
+
+      <p id="agents-status" class="hint">
+        Running inside FDL. API keys entered in the panel are stored in browser local storage for this origin.
+      </p>
+    </section>
+  </main>
+
+  <script type="module" src="./agents.js"></script>
+</body>
 </html>
