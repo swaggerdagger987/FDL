@@ -84,6 +84,8 @@ const dom = {
   team: document.querySelector("#screen-team"),
   ageMin: document.querySelector("#screen-age-min"),
   ageMax: document.querySelector("#screen-age-max"),
+  pprMin: document.querySelector("#screen-ppr-min"),
+  pprMax: document.querySelector("#screen-ppr-max"),
   positionPills: document.querySelector("#screen-position-pills"),
   metricSearch: document.querySelector("#metric-search"),
   metricCategories: document.querySelector("#screen-metric-categories"),
@@ -204,8 +206,9 @@ function wireEvents() {
   dom.head.addEventListener("click", onResultsHeadClick);
   dom.results.addEventListener("click", onResultsBodyClick);
 
-  [dom.search, dom.team, dom.ageMin, dom.ageMax].forEach((element) => {
+  [dom.search, dom.team, dom.ageMin, dom.ageMax, dom.pprMin, dom.pprMax].forEach((element) => {
     element.addEventListener("change", scheduleRunScreen);
+    element.addEventListener("input", scheduleRunScreen);
   });
 
   dom.search.addEventListener("keydown", (event) => {
@@ -679,7 +682,16 @@ function onActiveFilterChange(event) {
 
 function buildFiltersPayload() {
   const filters = [];
-  for (const filter of state.activeFilters) {
+  const quickPprFilter = buildQuickRangeFilter("fantasy_points_ppr", dom.pprMin?.value, dom.pprMax?.value);
+  const activeFilters = quickPprFilter
+    ? state.activeFilters.filter((filter) => String(filter.key || "").trim() !== "fantasy_points_ppr")
+    : state.activeFilters;
+
+  if (quickPprFilter) {
+    filters.push(quickPprFilter);
+  }
+
+  for (const filter of activeFilters) {
     const key = String(filter.key || "").trim();
     const op = String(filter.op || "gte").trim();
     const value = toNumberOrNull(filter.value);
@@ -695,6 +707,26 @@ function buildFiltersPayload() {
     filters.push({ key, op, value });
   }
   return filters;
+}
+
+function buildQuickRangeFilter(key, minRaw, maxRaw) {
+  const min = toNumberOrNull(minRaw);
+  const max = toNumberOrNull(maxRaw);
+  if (min === null && max === null) {
+    return null;
+  }
+  if (min !== null && max !== null) {
+    return {
+      key,
+      op: "between",
+      value: Math.min(min, max),
+      value_max: Math.max(min, max)
+    };
+  }
+  if (min !== null) {
+    return { key, op: "gte", value: min };
+  }
+  return { key, op: "lte", value: max };
 }
 
 async function runScreen() {
@@ -1249,6 +1281,8 @@ function getCurrentViewConfig() {
     team: String(dom.team.value || ""),
     age_min: String(dom.ageMin.value || ""),
     age_max: String(dom.ageMax.value || ""),
+    ppr_min: String(dom.pprMin?.value || ""),
+    ppr_max: String(dom.pprMax?.value || ""),
     positions: [...state.selectedPositions],
     active_columns: [...state.activeColumns],
     active_filters: state.activeFilters.map((item) => ({
@@ -1270,6 +1304,8 @@ function applyViewConfig(rawConfig) {
   dom.team.value = String(config.team || "");
   dom.ageMin.value = String(config.age_min || "");
   dom.ageMax.value = String(config.age_max || "");
+  if (dom.pprMin) dom.pprMin.value = String(config.ppr_min || "");
+  if (dom.pprMax) dom.pprMax.value = String(config.ppr_max || "");
 
   state.selectedPositions = new Set(
     (Array.isArray(config.positions) ? config.positions : [])
