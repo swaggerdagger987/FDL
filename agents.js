@@ -253,10 +253,10 @@ function injectComicLabelStyles(frameDoc) {
 
     div[style*="transform:translateX(-50%)"][style*="--pixel-overlay-selected-z"] > div,
     div[style*="transform: translateX(-50%)"][style*="--pixel-overlay-selected-z"] > div {
-      background: #ffffff !important;
-      border: 2px solid #111111 !important;
-      box-shadow: 2px 2px 0 #111111 !important;
-      color: #111111 !important;
+      background: #0b0b0b !important;
+      border: 2px solid #ffffff !important;
+      box-shadow: 2px 2px 0 #000000 !important;
+      color: #ffffff !important;
     }
 
     div[style*="transform:translateX(-50%)"][style*="--pixel-overlay-selected-z"] span,
@@ -265,16 +265,16 @@ function injectComicLabelStyles(frameDoc) {
     div[style*="transform: translateX(-50%)"][style*="--pixel-overlay-selected-z"] span,
     div[style*="transform: translateX(-50%)"][style*="--pixel-overlay-selected-z"] button,
     div[style*="transform: translateX(-50%)"][style*="--pixel-overlay-selected-z"] svg {
-      color: #111111 !important;
-      fill: #111111 !important;
-      stroke: #111111 !important;
+      color: #ffffff !important;
+      fill: #ffffff !important;
+      stroke: #ffffff !important;
       opacity: 1 !important;
     }
 
     div[style*="transform:translateX(-50%)"][style*="--pixel-overlay-selected-z"] button,
     div[style*="transform: translateX(-50%)"][style*="--pixel-overlay-selected-z"] button {
-      border: 1px solid #111111 !important;
-      background: #ffffff !important;
+      border: 1px solid #ffffff !important;
+      background: #0b0b0b !important;
     }
   `;
   frameDoc.head.appendChild(style);
