@@ -271,12 +271,19 @@ function injectComicLabelStyles(frameDoc) {
     div[style*="transform:translateX(-50%)"][style*="--pixel-overlay-selected-z"] span,
     div[style*="transform: translateX(-50%)"][style*="--pixel-overlay-selected-z"] button,
     div[style*="transform:translateX(-50%)"][style*="--pixel-overlay-selected-z"] svg,
+    div[style*="transform:translateX(-50%)"][style*="--pixel-overlay-selected-z"] div,
+    div[style*="transform:translateX(-50%)"][style*="--pixel-overlay-selected-z"] p,
     div[style*="transform: translateX(-50%)"][style*="--pixel-overlay-selected-z"] span,
     div[style*="transform: translateX(-50%)"][style*="--pixel-overlay-selected-z"] button,
-    div[style*="transform: translateX(-50%)"][style*="--pixel-overlay-selected-z"] svg {
+    div[style*="transform: translateX(-50%)"][style*="--pixel-overlay-selected-z"] svg,
+    div[style*="transform: translateX(-50%)"][style*="--pixel-overlay-selected-z"] div,
+    div[style*="transform: translateX(-50%)"][style*="--pixel-overlay-selected-z"] p,
+    div[style*="transform:translateX(-50%)"][style*="--pixel-overlay-selected-z"] * ,
+    div[style*="transform: translateX(-50%)"][style*="--pixel-overlay-selected-z"] * {
       color: #ffffff !important;
       fill: #ffffff !important;
       stroke: #ffffff !important;
+      -webkit-text-fill-color: #ffffff !important;
       opacity: 1 !important;
     }
 
