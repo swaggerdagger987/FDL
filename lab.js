@@ -423,7 +423,7 @@ function onQuickModeClick(event) {
   const button = event.target.closest("button.quick-mode-btn[data-mode]");
   if (!button) return;
   const mode = String(button.dataset.mode || "").trim();
-  if (mode !== "top" && mode !== "all") return;
+  if (mode !== "top" && mode !== "all" && mode !== "active") return;
   if (state.quickMetricMode === mode) return;
   state.quickMetricMode = mode;
   renderQuickModeToggle();
@@ -470,6 +470,19 @@ function getVisibleQuickMetrics() {
   const query = String(dom.quickFilterSearch?.value || "").trim().toLowerCase();
   const allOptions = state.metricOptions.filter((item) => item && item.key && item.key !== "fantasy_points_ppr");
   const showAll = state.quickMetricMode === "all";
+  const showOnlyActive = state.quickMetricMode === "active";
+  if (showOnlyActive) {
+    const activeKeys = new Set(
+      Object.entries(state.quickMetricRanges || {})
+        .filter(([, range]) => String(range?.min || "").trim() || String(range?.max || "").trim())
+        .map(([key]) => key)
+    );
+    return allOptions
+      .filter((item) => activeKeys.has(item.key))
+      .filter((item) => !query || item.key.toLowerCase().includes(query) || item.label.toLowerCase().includes(query))
+      .slice(0, 240);
+  }
+
   if (query || showAll) {
     return allOptions
       .filter((item) => item.key.toLowerCase().includes(query) || item.label.toLowerCase().includes(query))
@@ -1449,7 +1462,7 @@ function getCurrentViewConfig() {
         }
       ])
     ),
-    quick_metric_mode: state.quickMetricMode === "all" ? "all" : "top",
+    quick_metric_mode: state.quickMetricMode === "all" || state.quickMetricMode === "active" ? state.quickMetricMode : "top",
     positions: [...state.selectedPositions],
     active_columns: [...state.activeColumns],
     active_filters: state.activeFilters.map((item) => ({
@@ -1474,7 +1487,10 @@ function applyViewConfig(rawConfig) {
   if (dom.pprMin) dom.pprMin.value = String(config.ppr_min || "");
   if (dom.pprMax) dom.pprMax.value = String(config.ppr_max || "");
   if (dom.quickFilterSearch) dom.quickFilterSearch.value = "";
-  state.quickMetricMode = String(config.quick_metric_mode || "top") === "all" ? "all" : "top";
+  {
+    const mode = String(config.quick_metric_mode || "top");
+    state.quickMetricMode = mode === "all" || mode === "active" ? mode : "top";
+  }
   state.quickMetricRanges = {};
   const quickRanges = config.quick_metric_ranges;
   if (quickRanges && typeof quickRanges === "object") {
