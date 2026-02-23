@@ -86,6 +86,7 @@ const dom = {
   ageMax: document.querySelector("#screen-age-max"),
   pprMin: document.querySelector("#screen-ppr-min"),
   pprMax: document.querySelector("#screen-ppr-max"),
+  quickModeToggle: document.querySelector("#screen-quick-mode-toggle"),
   quickFilterSearch: document.querySelector("#screen-quick-filter-search"),
   quickMetricInputs: document.querySelector("#screen-quick-metric-inputs"),
   positionPills: document.querySelector("#screen-position-pills"),
@@ -127,7 +128,8 @@ const state = {
   expandedPlayerIds: new Set(),
   lastItems: [],
   draggingColumnKey: "",
-  quickMetricRanges: {}
+  quickMetricRanges: {},
+  quickMetricMode: "top"
 };
 
 initialize();
@@ -158,6 +160,7 @@ async function initialize() {
   renderPositionPills();
   renderMetricCategories();
   renderMetricOptions();
+  renderQuickModeToggle();
   renderQuickMetricInputs();
   renderActiveColumns();
   renderActiveFilters();
@@ -195,6 +198,9 @@ function wireEvents() {
 
   dom.metricCategories.addEventListener("click", onMetricCategoryClick);
   dom.positionPills.addEventListener("click", onPositionPillClick);
+  if (dom.quickModeToggle) {
+    dom.quickModeToggle.addEventListener("click", onQuickModeClick);
+  }
   if (dom.quickFilterSearch) {
     dom.quickFilterSearch.addEventListener("input", () => {
       renderQuickMetricInputs();
@@ -413,6 +419,25 @@ function renderMetricOptions() {
     .join("");
 }
 
+function onQuickModeClick(event) {
+  const button = event.target.closest("button.quick-mode-btn[data-mode]");
+  if (!button) return;
+  const mode = String(button.dataset.mode || "").trim();
+  if (mode !== "top" && mode !== "all") return;
+  if (state.quickMetricMode === mode) return;
+  state.quickMetricMode = mode;
+  renderQuickModeToggle();
+  renderQuickMetricInputs();
+}
+
+function renderQuickModeToggle() {
+  if (!dom.quickModeToggle) return;
+  dom.quickModeToggle.querySelectorAll("button.quick-mode-btn[data-mode]").forEach((button) => {
+    const mode = String(button.dataset.mode || "").trim();
+    button.classList.toggle("active", mode === state.quickMetricMode);
+  });
+}
+
 function getDefaultQuickMetricKeys() {
   return [
     "fantasy_points_half_ppr",
@@ -444,7 +469,8 @@ function getDefaultQuickMetricKeys() {
 function getVisibleQuickMetrics() {
   const query = String(dom.quickFilterSearch?.value || "").trim().toLowerCase();
   const allOptions = state.metricOptions.filter((item) => item && item.key && item.key !== "fantasy_points_ppr");
-  if (query) {
+  const showAll = state.quickMetricMode === "all";
+  if (query || showAll) {
     return allOptions
       .filter((item) => item.key.toLowerCase().includes(query) || item.label.toLowerCase().includes(query))
       .slice(0, 240);
@@ -1221,6 +1247,7 @@ async function refreshDatabase() {
     await Promise.all([loadTeamOptions(), loadMetricOptions()]);
     renderMetricCategories();
     renderMetricOptions();
+    renderQuickModeToggle();
     renderQuickMetricInputs();
     renderActiveColumns();
     renderActiveFilters();
@@ -1261,6 +1288,7 @@ async function waitForSyncToFinish() {
     await Promise.all([loadTeamOptions(), loadMetricOptions()]);
     renderMetricCategories();
     renderMetricOptions();
+    renderQuickModeToggle();
     renderQuickMetricInputs();
     renderActiveColumns();
     renderActiveFilters();
@@ -1421,6 +1449,7 @@ function getCurrentViewConfig() {
         }
       ])
     ),
+    quick_metric_mode: state.quickMetricMode === "all" ? "all" : "top",
     positions: [...state.selectedPositions],
     active_columns: [...state.activeColumns],
     active_filters: state.activeFilters.map((item) => ({
@@ -1445,6 +1474,7 @@ function applyViewConfig(rawConfig) {
   if (dom.pprMin) dom.pprMin.value = String(config.ppr_min || "");
   if (dom.pprMax) dom.pprMax.value = String(config.ppr_max || "");
   if (dom.quickFilterSearch) dom.quickFilterSearch.value = "";
+  state.quickMetricMode = String(config.quick_metric_mode || "top") === "all" ? "all" : "top";
   state.quickMetricRanges = {};
   const quickRanges = config.quick_metric_ranges;
   if (quickRanges && typeof quickRanges === "object") {
@@ -1480,6 +1510,7 @@ function applyViewConfig(rawConfig) {
 
   state.sortKey = String(config.sort_key || "fantasy_points_ppr");
   state.sortDirection = String(config.sort_direction || "desc") === "asc" ? "asc" : "desc";
+  renderQuickModeToggle();
   renderQuickMetricInputs();
 }
 

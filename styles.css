@@ -1960,6 +1960,29 @@ h3 {
   gap: 0.54rem;
 }
 
+.quick-mode-toggle {
+  display: inline-flex;
+  gap: 0.36rem;
+  align-items: center;
+}
+
+.quick-mode-btn {
+  border: 1px dashed rgba(37, 50, 38, 0.44);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.66);
+  color: #253024;
+  padding: 0.28rem 0.62rem;
+  font-size: 0.77rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.quick-mode-btn.active {
+  border-color: rgba(108, 49, 12, 0.72);
+  background: linear-gradient(154deg, var(--orange), var(--orange-soft));
+  color: #2d1e11;
+}
+
 .quick-metric-inputs {
   max-height: 280px;
   overflow-y: auto;
