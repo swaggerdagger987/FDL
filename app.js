@@ -24,6 +24,11 @@ const DATALIST_OPTION_LIMIT = 30;
 const REMOTE_SUGGESTION_LIMIT = 40;
 const REMOTE_SEARCH_MIN_CHARS = 2;
 const REMOTE_SEARCH_DEBOUNCE_MS = 300;
+const PLAYER_CATALOG_CACHE_KEY = "fdl_player_catalog_cache_v1";
+const PLAYER_CATALOG_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const SLEEPER_SUBSET_CACHE_KEY = "fdl_sleeper_subset_cache_v1";
+const SLEEPER_SUBSET_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const SLEEPER_SUBSET_CACHE_MAX = 5000;
 
 let suggestionRequestCounter = 0;
 let suggestionDebounceTimer = null;
@@ -110,6 +115,7 @@ initialize();
 
 function initialize() {
   initializeCatalog();
+  hydrateCatalogFromCache();
   hydrateFreeUsage();
   renderPlayerOptions();
   renderLeagueOptions();
@@ -714,7 +720,13 @@ async function probeDatabaseConnection() {
   }
 }
 
-async function loadCatalogFromDatabase() {
+async function loadCatalogFromDatabase(options = {}) {
+  const { force } = options;
+  const cacheStatus = hydrateCatalogFromCache();
+  if (!force && cacheStatus === "fresh") {
+    return;
+  }
+
   try {
     const response = await fetch(`/api/players?limit=${CATALOG_WARM_LIMIT}&sort=points_desc`);
     if (!response.ok) {
@@ -738,6 +750,7 @@ async function loadCatalogFromDatabase() {
     if (added > 0) {
       rebuildCatalogIndexes();
     }
+    persistCatalogCache();
     renderPlayerOptions(state.catalogPlayers);
   } catch (error) {
     // Fall back silently to seeded local catalog.
@@ -813,7 +826,7 @@ async function handleRefreshLiveDatabase() {
     }
     const summary = payload.summary || {};
     await probeDatabaseConnection();
-    await loadCatalogFromDatabase();
+    await loadCatalogFromDatabase({ force: true });
     setStatus(
       `Live database refreshed: ${summary.players_upserted || 0} players, ${summary.stats_rows_upserted || 0} stat rows.`,
       "success"
@@ -848,7 +861,7 @@ async function waitForSyncToFinishInTerminal() {
     }
     const summary = status.last_summary || {};
     await probeDatabaseConnection();
-    await loadCatalogFromDatabase();
+    await loadCatalogFromDatabase({ force: true });
     setStatus(
       `Live database refreshed: ${summary.players_upserted || 0} players, ${summary.stats_rows_upserted || 0} stat rows.`,
       "success"
@@ -925,7 +938,10 @@ async function loadSleeperPlayerCatalog(requestedIds = []) {
   }
 
   if (!state.sleeperPlayersById) {
-    state.sleeperPlayersById = {};
+    hydrateSleeperSubsetFromCache();
+    if (!state.sleeperPlayersById) {
+      state.sleeperPlayersById = {};
+    }
   }
 
   const missing = requested.filter((playerId) => !state.sleeperPlayersById[playerId]);
@@ -951,7 +967,89 @@ async function loadSleeperPlayerCatalog(requestedIds = []) {
     ...state.sleeperPlayersById,
     ...players
   };
+  trimSleeperSubsetCache();
+  persistSleeperSubsetCache();
   return state.sleeperPlayersById;
+}
+
+function hydrateCatalogFromCache() {
+  const payload = readCachedJson(PLAYER_CATALOG_CACHE_KEY);
+  if (!payload || !Array.isArray(payload.players) || payload.players.length === 0) {
+    return "miss";
+  }
+
+  const status = isCacheFresh(payload.timestamp, PLAYER_CATALOG_CACHE_TTL_MS) ? "fresh" : "stale";
+  let merged = 0;
+  for (const cachedPlayer of payload.players) {
+    if (!cachedPlayer || !cachedPlayer.id || !cachedPlayer.name) {
+      continue;
+    }
+    if (upsertCatalogPlayer(cachedPlayer)) {
+      merged += 1;
+    }
+  }
+  if (merged > 0) {
+    rebuildCatalogIndexes();
+  }
+  return status;
+}
+
+function persistCatalogCache() {
+  writeCachedJson(PLAYER_CATALOG_CACHE_KEY, {
+    timestamp: Date.now(),
+    players: state.catalogPlayers.slice(0, CATALOG_WARM_LIMIT)
+  });
+}
+
+function hydrateSleeperSubsetFromCache() {
+  const payload = readCachedJson(SLEEPER_SUBSET_CACHE_KEY);
+  if (!payload || !payload.players || typeof payload.players !== "object") {
+    return "miss";
+  }
+  state.sleeperPlayersById = payload.players;
+  return isCacheFresh(payload.timestamp, SLEEPER_SUBSET_CACHE_TTL_MS) ? "fresh" : "stale";
+}
+
+function persistSleeperSubsetCache() {
+  if (!state.sleeperPlayersById || typeof state.sleeperPlayersById !== "object") {
+    return;
+  }
+  writeCachedJson(SLEEPER_SUBSET_CACHE_KEY, {
+    timestamp: Date.now(),
+    players: state.sleeperPlayersById
+  });
+}
+
+function trimSleeperSubsetCache() {
+  const entries = Object.entries(state.sleeperPlayersById || {});
+  if (entries.length <= SLEEPER_SUBSET_CACHE_MAX) {
+    return;
+  }
+  state.sleeperPlayersById = Object.fromEntries(entries.slice(entries.length - SLEEPER_SUBSET_CACHE_MAX));
+}
+
+function readCachedJson(key) {
+  try {
+    return JSON.parse(localStorage.getItem(key) || "null");
+  } catch (error) {
+    return null;
+  }
+}
+
+function writeCachedJson(key, payload) {
+  try {
+    localStorage.setItem(key, JSON.stringify(payload));
+  } catch (error) {
+    // Ignore quota or serialization failures and continue without cache.
+  }
+}
+
+function isCacheFresh(timestamp, ttlMs) {
+  const ts = Number(timestamp);
+  if (!Number.isFinite(ts)) {
+    return false;
+  }
+  return Date.now() - ts <= ttlMs;
 }
 
 function mapSleeperRosterToInternalIds(roster, sleeperPlayersById) {
