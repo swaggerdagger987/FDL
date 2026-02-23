@@ -250,6 +250,32 @@ function injectComicLabelStyles(frameDoc) {
       opacity: 1 !important;
       font-weight: 600 !important;
     }
+
+    div[style*="transform:translateX(-50%)"][style*="--pixel-overlay-selected-z"] > div,
+    div[style*="transform: translateX(-50%)"][style*="--pixel-overlay-selected-z"] > div {
+      background: #ffffff !important;
+      border: 2px solid #111111 !important;
+      box-shadow: 2px 2px 0 #111111 !important;
+      color: #111111 !important;
+    }
+
+    div[style*="transform:translateX(-50%)"][style*="--pixel-overlay-selected-z"] span,
+    div[style*="transform: translateX(-50%)"][style*="--pixel-overlay-selected-z"] button,
+    div[style*="transform:translateX(-50%)"][style*="--pixel-overlay-selected-z"] svg,
+    div[style*="transform: translateX(-50%)"][style*="--pixel-overlay-selected-z"] span,
+    div[style*="transform: translateX(-50%)"][style*="--pixel-overlay-selected-z"] button,
+    div[style*="transform: translateX(-50%)"][style*="--pixel-overlay-selected-z"] svg {
+      color: #111111 !important;
+      fill: #111111 !important;
+      stroke: #111111 !important;
+      opacity: 1 !important;
+    }
+
+    div[style*="transform:translateX(-50%)"][style*="--pixel-overlay-selected-z"] button,
+    div[style*="transform: translateX(-50%)"][style*="--pixel-overlay-selected-z"] button {
+      border: 1px solid #111111 !important;
+      background: #ffffff !important;
+    }
   `;
   frameDoc.head.appendChild(style);
 }
