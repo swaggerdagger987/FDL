@@ -1,11 +1,129 @@
 import { bindConnectButton, hydrateHeader } from "./site_state.js";
 
+const AGENT_CONFIG_STORAGE_KEY = "fdl.agentConfigs.v1";
+const AGENT_DEFINITIONS = [
+  {
+    id: 1,
+    name: "Hootsworth",
+    purpose: "Strategic coordinator that sets lineup priorities and balances weekly risk."
+  },
+  {
+    id: 2,
+    name: "Dr. Dolphin",
+    purpose: "Data specialist focused on projections, trend shifts, and matchup volatility."
+  },
+  {
+    id: 3,
+    name: "Hawkeye",
+    purpose: "Waiver and opponent scanner that spots immediate tactical opportunities."
+  },
+  {
+    id: 4,
+    name: "The Fox",
+    purpose: "Trade negotiator that identifies leverage, pricing edges, and deal timing."
+  },
+  {
+    id: 5,
+    name: "The Octopus",
+    purpose: "Scenario planner that runs multi-step contingency paths across roster outcomes."
+  },
+  {
+    id: 6,
+    name: "The Elephant",
+    purpose: "Memory and context keeper that tracks long-term league behavior and patterns."
+  }
+];
+
 initialize();
 
 function initialize() {
   hydrateHeader("agents");
   bindConnectButton();
+  setupAgentConfigPanel();
   setupAgentControls();
+}
+
+function setupAgentConfigPanel() {
+  const cardsHost = document.getElementById("agent-cards");
+  const status = document.getElementById("agents-status");
+  const iframe = document.getElementById("agents-iframe");
+  if (!cardsHost) {
+    return;
+  }
+
+  const config = loadAgentConfig();
+  cardsHost.innerHTML = AGENT_DEFINITIONS.map((agent) => {
+    const existing = config[String(agent.id)] || {};
+    const apiKey = typeof existing.apiKey === "string" ? existing.apiKey : "";
+    return `
+      <article class="agent-card" data-agent-id="${agent.id}">
+        <h3>${escapeHtml(agent.name)}</h3>
+        <p class="agent-purpose">${escapeHtml(agent.purpose)}</p>
+        <label class="agent-key-label" for="agent-key-${agent.id}">API Key</label>
+        <input
+          id="agent-key-${agent.id}"
+          class="agent-key-input"
+          type="password"
+          autocomplete="off"
+          placeholder="sk-..."
+          value="${escapeAttribute(apiKey)}"
+        />
+        <button class="agent-save-btn" type="button">Save API Key</button>
+      </article>
+    `;
+  }).join("");
+
+  for (const card of cardsHost.querySelectorAll(".agent-card")) {
+    const id = Number(card.getAttribute("data-agent-id"));
+    const input = card.querySelector(".agent-key-input");
+    const button = card.querySelector(".agent-save-btn");
+    if (!id || !(input instanceof HTMLInputElement) || !(button instanceof HTMLButtonElement)) {
+      continue;
+    }
+    button.addEventListener("click", () => {
+      const current = loadAgentConfig();
+      const existing = current[String(id)] || {};
+      current[String(id)] = {
+        apiKey: input.value.trim(),
+        model: typeof existing.model === "string" ? existing.model : "",
+        baseUrl: typeof existing.baseUrl === "string" ? existing.baseUrl : ""
+      };
+      localStorage.setItem(AGENT_CONFIG_STORAGE_KEY, JSON.stringify(current));
+      if (status) {
+        status.textContent = `Saved API key for ${AGENT_DEFINITIONS[id - 1]?.name || `Agent ${id}`}. Reloading tactical map to apply.`;
+      }
+      if (iframe instanceof HTMLIFrameElement && iframe.contentWindow) {
+        iframe.contentWindow.location.reload();
+      }
+    });
+  }
+}
+
+function loadAgentConfig() {
+  try {
+    const raw = localStorage.getItem(AGENT_CONFIG_STORAGE_KEY);
+    if (!raw) {
+      return {};
+    }
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      return parsed;
+    }
+    return {};
+  } catch (_error) {
+    return {};
+  }
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function escapeAttribute(value) {
+  return escapeHtml(value).replaceAll('"', "&quot;");
 }
 
 function setupAgentControls() {
@@ -185,9 +303,9 @@ function setupAgentControls() {
       panState = null;
     });
 
-    pinPersonalityPanel(frameDoc);
+    hidePersonalityPanel(frameDoc);
     const observer = new MutationObserver(() => {
-      pinPersonalityPanel(frameDoc);
+      hidePersonalityPanel(frameDoc);
       injectComicLabelStyles(frameDoc);
       enforceSelectedPopupContrast(frameDoc);
     });
@@ -246,6 +364,14 @@ function pinPersonalityPanel(frameDoc) {
   panel.style.maxHeight = "34%";
   panel.style.overflow = "auto";
   panel.style.zIndex = "130";
+}
+
+function hidePersonalityPanel(frameDoc) {
+  const panel = findPersonalityPanel(frameDoc);
+  if (!panel) {
+    return;
+  }
+  panel.style.display = "none";
 }
 
 function injectComicLabelStyles(frameDoc) {
