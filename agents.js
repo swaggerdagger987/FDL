@@ -204,6 +204,14 @@ function setupAgentControls() {
         enforceSelectedPopupContrast(frameDoc);
       }, 180);
     }
+
+    if (!frameWin.__fdlPopupContrastRaf) {
+      const paint = () => {
+        enforceSelectedPopupContrast(frameDoc);
+        frameWin.__fdlPopupContrastRaf = frameWin.requestAnimationFrame(paint);
+      };
+      frameWin.__fdlPopupContrastRaf = frameWin.requestAnimationFrame(paint);
+    }
   }
 
   iframe.addEventListener("load", enhanceFrameUi);
@@ -329,9 +337,18 @@ function injectComicLabelStyles(frameDoc) {
 }
 
 function enforceSelectedPopupContrast(frameDoc) {
-  const selectedBoxes = frameDoc.querySelectorAll(
-    'div[style*="--pixel-overlay-selected-z"]'
+  const selectedBoxes = new Set(
+    Array.from(
+      frameDoc.querySelectorAll('div[style*="--pixel-overlay-selected-z"], div[style*="pointer-events: auto"]')
+    ).filter((el) => {
+      if (!(el instanceof HTMLElement)) {
+        return false;
+      }
+      const cs = frameDoc.defaultView.getComputedStyle(el);
+      return cs.position === "absolute" && Number(cs.zIndex || 0) >= 100;
+    })
   );
+
   for (const box of selectedBoxes) {
     if (!(box instanceof HTMLElement)) {
       continue;
@@ -356,9 +373,11 @@ function enforceSelectedPopupContrast(frameDoc) {
       node.style.setProperty("stroke", "#ffffff", "important");
       node.style.setProperty("-webkit-text-fill-color", "#ffffff", "important");
       node.style.setProperty("opacity", "1", "important");
+      node.style.setProperty("filter", "none", "important");
       if (node.tagName === "BUTTON") {
         node.style.setProperty("background", "#0b0b0b", "important");
         node.style.setProperty("border", "1px solid #ffffff", "important");
+        node.style.setProperty("color", "#ffffff", "important");
       }
     }
   }
