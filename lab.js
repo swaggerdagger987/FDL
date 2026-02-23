@@ -86,6 +86,8 @@ const dom = {
   ageMax: document.querySelector("#screen-age-max"),
   pprMin: document.querySelector("#screen-ppr-min"),
   pprMax: document.querySelector("#screen-ppr-max"),
+  quickFilterSearch: document.querySelector("#screen-quick-filter-search"),
+  quickMetricInputs: document.querySelector("#screen-quick-metric-inputs"),
   positionPills: document.querySelector("#screen-position-pills"),
   metricSearch: document.querySelector("#metric-search"),
   metricCategories: document.querySelector("#screen-metric-categories"),
@@ -124,7 +126,8 @@ const state = {
   savedViews: [],
   expandedPlayerIds: new Set(),
   lastItems: [],
-  draggingColumnKey: ""
+  draggingColumnKey: "",
+  quickMetricRanges: {}
 };
 
 initialize();
@@ -155,6 +158,7 @@ async function initialize() {
   renderPositionPills();
   renderMetricCategories();
   renderMetricOptions();
+  renderQuickMetricInputs();
   renderActiveColumns();
   renderActiveFilters();
   renderSavedViews();
@@ -191,6 +195,14 @@ function wireEvents() {
 
   dom.metricCategories.addEventListener("click", onMetricCategoryClick);
   dom.positionPills.addEventListener("click", onPositionPillClick);
+  if (dom.quickFilterSearch) {
+    dom.quickFilterSearch.addEventListener("input", () => {
+      renderQuickMetricInputs();
+    });
+  }
+  if (dom.quickMetricInputs) {
+    dom.quickMetricInputs.addEventListener("input", onQuickMetricInput);
+  }
 
   dom.activeColumns.addEventListener("click", onActiveColumnClick);
   dom.activeColumns.addEventListener("dragstart", onColumnDragStart);
@@ -399,6 +411,105 @@ function renderMetricOptions() {
       )}) | ${escapeHtml(range)}${escapeHtml(suffix)}</option>`;
     })
     .join("");
+}
+
+function getDefaultQuickMetricKeys() {
+  return [
+    "fantasy_points_half_ppr",
+    "fantasy_points_std",
+    "receiving_yards",
+    "receiving_targets",
+    "receptions",
+    "receiving_tds",
+    "rushing_yards",
+    "rushing_attempts",
+    "rushing_tds",
+    "passing_yards",
+    "passing_tds",
+    "interceptions",
+    "air_yards_share",
+    "target_share",
+    "yards_per_route_run",
+    "yards_per_target",
+    "yards_per_rush_attempt",
+    "red_zone_targets",
+    "goal_line_carries",
+    "wopr",
+    "touchdowns",
+    "turnovers",
+    "snap_pct"
+  ];
+}
+
+function getVisibleQuickMetrics() {
+  const query = String(dom.quickFilterSearch?.value || "").trim().toLowerCase();
+  const allOptions = state.metricOptions.filter((item) => item && item.key && item.key !== "fantasy_points_ppr");
+  if (query) {
+    return allOptions
+      .filter((item) => item.key.toLowerCase().includes(query) || item.label.toLowerCase().includes(query))
+      .slice(0, 240);
+  }
+
+  const defaults = new Set(getDefaultQuickMetricKeys());
+  const byKey = new Map(allOptions.map((item) => [item.key, item]));
+  const seeded = [];
+  for (const key of defaults) {
+    const item = byKey.get(key);
+    if (item) seeded.push(item);
+  }
+  return seeded;
+}
+
+function renderQuickMetricInputs() {
+  if (!dom.quickMetricInputs) return;
+  const items = getVisibleQuickMetrics();
+  if (!items.length) {
+    dom.quickMetricInputs.innerHTML = `<p class="chip-empty">No metrics found. Type in search to reveal inputs.</p>`;
+    return;
+  }
+
+  dom.quickMetricInputs.innerHTML = items
+    .map((item) => {
+      const current = state.quickMetricRanges[item.key] || { min: "", max: "" };
+      return `
+        <div class="quick-metric-row" data-key="${escapeHtml(item.key)}">
+          <div class="quick-metric-copy">
+            <p class="quick-metric-title">${escapeHtml(item.label)}</p>
+            <p class="quick-metric-meta">${escapeHtml(item.key)}</p>
+          </div>
+          <div class="quick-metric-controls">
+            <input data-field="min" type="number" step="0.01" placeholder="Min" value="${escapeHtml(String(current.min || ""))}" />
+            <input data-field="max" type="number" step="0.01" placeholder="Max" value="${escapeHtml(String(current.max || ""))}" />
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function onQuickMetricInput(event) {
+  const row = event.target.closest(".quick-metric-row");
+  if (!row) return;
+  const key = String(row.dataset.key || "").trim();
+  if (!key) return;
+
+  const field = String(event.target.dataset.field || "");
+  if (field !== "min" && field !== "max") return;
+
+  const current = state.quickMetricRanges[key] || { min: "", max: "" };
+  if (field === "min") {
+    current.min = event.target.value;
+  } else {
+    current.max = event.target.value;
+  }
+
+  if (String(current.min || "").trim() === "" && String(current.max || "").trim() === "") {
+    delete state.quickMetricRanges[key];
+  } else {
+    state.quickMetricRanges[key] = current;
+  }
+
+  scheduleRunScreen();
 }
 
 function addSelectedAsColumn() {
@@ -683,12 +794,16 @@ function onActiveFilterChange(event) {
 function buildFiltersPayload() {
   const filters = [];
   const quickPprFilter = buildQuickRangeFilter("fantasy_points_ppr", dom.pprMin?.value, dom.pprMax?.value);
-  const activeFilters = quickPprFilter
-    ? state.activeFilters.filter((filter) => String(filter.key || "").trim() !== "fantasy_points_ppr")
-    : state.activeFilters;
+  const quickMetricFilters = buildQuickMetricFilters();
+  const excludedQuickKeys = new Set(quickMetricFilters.map((item) => item.key));
+  if (quickPprFilter) excludedQuickKeys.add("fantasy_points_ppr");
+  const activeFilters = state.activeFilters.filter((filter) => !excludedQuickKeys.has(String(filter.key || "").trim()));
 
   if (quickPprFilter) {
     filters.push(quickPprFilter);
+  }
+  for (const quickFilter of quickMetricFilters) {
+    filters.push(quickFilter);
   }
 
   for (const filter of activeFilters) {
@@ -707,6 +822,18 @@ function buildFiltersPayload() {
     filters.push({ key, op, value });
   }
   return filters;
+}
+
+function buildQuickMetricFilters() {
+  const output = [];
+  for (const [key, range] of Object.entries(state.quickMetricRanges || {})) {
+    const normalizedKey = normalizeMetricKey(key);
+    if (!normalizedKey || normalizedKey === "fantasy_points_ppr") continue;
+    const quickFilter = buildQuickRangeFilter(normalizedKey, range?.min, range?.max);
+    if (!quickFilter) continue;
+    output.push(quickFilter);
+  }
+  return output;
 }
 
 function buildQuickRangeFilter(key, minRaw, maxRaw) {
@@ -1094,6 +1221,7 @@ async function refreshDatabase() {
     await Promise.all([loadTeamOptions(), loadMetricOptions()]);
     renderMetricCategories();
     renderMetricOptions();
+    renderQuickMetricInputs();
     renderActiveColumns();
     renderActiveFilters();
     await runScreen();
@@ -1133,6 +1261,7 @@ async function waitForSyncToFinish() {
     await Promise.all([loadTeamOptions(), loadMetricOptions()]);
     renderMetricCategories();
     renderMetricOptions();
+    renderQuickMetricInputs();
     renderActiveColumns();
     renderActiveFilters();
     await runScreen();
@@ -1283,6 +1412,15 @@ function getCurrentViewConfig() {
     age_max: String(dom.ageMax.value || ""),
     ppr_min: String(dom.pprMin?.value || ""),
     ppr_max: String(dom.pprMax?.value || ""),
+    quick_metric_ranges: Object.fromEntries(
+      Object.entries(state.quickMetricRanges || {}).map(([key, value]) => [
+        key,
+        {
+          min: String(value?.min ?? ""),
+          max: String(value?.max ?? "")
+        }
+      ])
+    ),
     positions: [...state.selectedPositions],
     active_columns: [...state.activeColumns],
     active_filters: state.activeFilters.map((item) => ({
@@ -1306,6 +1444,19 @@ function applyViewConfig(rawConfig) {
   dom.ageMax.value = String(config.age_max || "");
   if (dom.pprMin) dom.pprMin.value = String(config.ppr_min || "");
   if (dom.pprMax) dom.pprMax.value = String(config.ppr_max || "");
+  if (dom.quickFilterSearch) dom.quickFilterSearch.value = "";
+  state.quickMetricRanges = {};
+  const quickRanges = config.quick_metric_ranges;
+  if (quickRanges && typeof quickRanges === "object") {
+    for (const [key, value] of Object.entries(quickRanges)) {
+      const normalizedKey = normalizeMetricKey(key);
+      if (!normalizedKey || normalizedKey === "fantasy_points_ppr") continue;
+      const min = String(value?.min ?? "");
+      const max = String(value?.max ?? "");
+      if (!min && !max) continue;
+      state.quickMetricRanges[normalizedKey] = { min, max };
+    }
+  }
 
   state.selectedPositions = new Set(
     (Array.isArray(config.positions) ? config.positions : [])
@@ -1329,6 +1480,7 @@ function applyViewConfig(rawConfig) {
 
   state.sortKey = String(config.sort_key || "fantasy_points_ppr");
   state.sortDirection = String(config.sort_direction || "desc") === "asc" ? "asc" : "desc";
+  renderQuickMetricInputs();
 }
 
 function normalizeOperator(value) {

@@ -1950,6 +1950,56 @@ h3 {
   gap: 0.42rem;
 }
 
+.quick-metric-panel {
+  margin-top: 0.82rem;
+  border: 2px dashed rgba(37, 50, 38, 0.34);
+  border-radius: 14px 10px 12px 9px;
+  padding: 0.74rem;
+  background: rgba(255, 255, 255, 0.52);
+  display: grid;
+  gap: 0.54rem;
+}
+
+.quick-metric-inputs {
+  max-height: 280px;
+  overflow-y: auto;
+  display: grid;
+  gap: 0.45rem;
+  padding-right: 0.1rem;
+}
+
+.quick-metric-row {
+  border: 1px dashed rgba(37, 50, 38, 0.3);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.66);
+  padding: 0.45rem 0.5rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.quick-metric-copy {
+  min-width: 0;
+}
+
+.quick-metric-title {
+  margin: 0;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.quick-metric-meta {
+  margin: 0.16rem 0 0;
+  color: #596353;
+  font-size: 0.7rem;
+  font-family: "IBM Plex Mono", "SFMono-Regular", ui-monospace, monospace;
+}
+
+.quick-metric-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(80px, 1fr));
+  gap: 0.4rem;
+}
+
 .active-columns-panel,
 .saved-views-panel {
   border: 2px dashed rgba(37, 50, 38, 0.34);
