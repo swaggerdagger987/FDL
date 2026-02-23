@@ -1,10 +1,11 @@
-# Fourth Down Labs V1 (3-Page IA)
+# Fourth Down Labs V1 (4-Page IA)
 
 Fourth Down Labs is now organized around a strict product architecture:
 
 - `/home.html` (Home)
 - `/lab.html` (The Lab)
 - `/league-intel.html` (League Intel + manager deep-dive state)
+- `/agents.html` (Pixel Agents control center)
 
 The primary UX is Sleeper-first and does not include trade analyzer flows in the main navigation.
 
@@ -16,6 +17,7 @@ Canonical pages:
 - `http://localhost:8000/home.html`
 - `http://localhost:8000/lab.html`
 - `http://localhost:8000/league-intel.html`
+- `http://localhost:8000/agents.html`
 
 Compatibility redirects:
 
@@ -27,6 +29,7 @@ Compatibility redirects:
 - `/modules.html` -> `/home.html`
 - `/pricing.html` -> `/home.html`
 - `/roadmap.html` -> `/home.html`
+- `/agents` -> `/agents.html`
 
 ## Shared State Contracts
 
@@ -58,6 +61,7 @@ Then open:
 - [http://localhost:8000](http://localhost:8000)
 - [http://localhost:8000/lab.html](http://localhost:8000/lab.html)
 - [http://localhost:8000/league-intel.html](http://localhost:8000/league-intel.html)
+- [http://localhost:8000/agents.html](http://localhost:8000/agents.html)
 
 ## Data + Sync
 
@@ -110,4 +114,3 @@ Sync default:
 ```bash
 make test
 ```
-

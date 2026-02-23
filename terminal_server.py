@@ -17,6 +17,7 @@ LEGACY_REDIRECTS = {
     "/home": "/home.html",
     "/lab": "/lab.html",
     "/league-intel": "/league-intel.html",
+    "/agents": "/agents.html",
     "/screener": "/lab.html",
     "/screener.html": "/lab.html",
     "/terminal": "/league-intel.html",

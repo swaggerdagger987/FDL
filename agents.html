@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agents | Fourth Down Labs</title>
+    <meta
+      name="description"
+      content="Fourth Down Labs pixel-agent command center with role-based avatars and per-agent API key configuration."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+    <style>
+      .agents-frame-wrap {
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        min-height: 74vh;
+        overflow: hidden;
+      }
+
+      .agents-frame-wrap iframe {
+        width: 100%;
+        min-height: 74vh;
+        border: 0;
+        display: block;
+        background: #111;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="ambient-backdrop" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <a class="brand" href="./home.html">
+        <span class="brand-dot"></span>
+        Fourth Down Labs
+      </a>
+      <nav class="main-nav" aria-label="Primary">
+        <a class="nav-link" data-nav-page="lab" href="./lab.html">Open the Lab</a>
+        <a class="nav-link" data-nav-page="intel" href="./league-intel.html">League Intel</a>
+        <a class="nav-link" data-nav-page="agents" href="./agents.html">Agents</a>
+        <button id="connect-sleeper-btn" class="nav-cta nav-connect-btn" type="button">Connect Sleeper</button>
+      </nav>
+    </header>
+
+    <main class="site-shell">
+      <section class="hero-panel fade-in">
+        <p class="eyebrow">AGENTS</p>
+        <h1>Pixel Agent War Room</h1>
+        <p class="subhead">
+          Six role-based avatars: Hootsworth, Dr. Dolphin, Hawkeye, The Fox, The Octopus, and The Elephant. Each avatar
+          has a dedicated API key/model configuration inside the panel.
+        </p>
+      </section>
+
+      <div class="hand-divider" aria-hidden="true"></div>
+
+      <section class="panel data-panel">
+        <div class="agents-frame-wrap">
+          <iframe
+            src="./pixel-agents/index.html"
+            title="Fourth Down Labs Pixel Agents"
+            loading="lazy"
+            referrerpolicy="no-referrer"
+          ></iframe>
+        </div>
+        <p id="agents-status" class="hint">
+          Running inside FDL. API keys entered in the panel are stored in browser local storage for this origin.
+        </p>
+      </section>
+    </main>
+
+    <script type="module" src="./agents.js"></script>
+  </body>
+</html>
