@@ -109,6 +109,7 @@ function setupAgentControls() {
     }
     frameWin.__fdlAgentsEnhanced = true;
     injectComicLabelStyles(frameDoc);
+    enforceSelectedPopupContrast(frameDoc);
     let panState = null;
 
     function isInsideInputUi(target) {
@@ -188,6 +189,7 @@ function setupAgentControls() {
     const observer = new MutationObserver(() => {
       pinPersonalityPanel(frameDoc);
       injectComicLabelStyles(frameDoc);
+      enforceSelectedPopupContrast(frameDoc);
     });
     observer.observe(frameDoc.body, { childList: true, subtree: true });
   }
@@ -294,5 +296,39 @@ function injectComicLabelStyles(frameDoc) {
     }
   `;
   frameDoc.head.appendChild(style);
+}
+
+function enforceSelectedPopupContrast(frameDoc) {
+  const selectedBoxes = frameDoc.querySelectorAll(
+    'div[style*="--pixel-overlay-selected-z"]'
+  );
+  for (const box of selectedBoxes) {
+    if (!(box instanceof HTMLElement)) {
+      continue;
+    }
+    box.style.color = "#ffffff";
+
+    const bubble = box.firstElementChild;
+    if (bubble instanceof HTMLElement) {
+      bubble.style.background = "#0b0b0b";
+      bubble.style.border = "2px solid #ffffff";
+      bubble.style.color = "#ffffff";
+    }
+
+    const descendants = box.querySelectorAll("*");
+    for (const node of descendants) {
+      if (!(node instanceof HTMLElement)) {
+        continue;
+      }
+      node.style.color = "#ffffff";
+      node.style.fill = "#ffffff";
+      node.style.stroke = "#ffffff";
+      node.style.webkitTextFillColor = "#ffffff";
+      if (node.tagName === "BUTTON") {
+        node.style.background = "#0b0b0b";
+        node.style.border = "1px solid #ffffff";
+      }
+    }
+  }
 }
 
