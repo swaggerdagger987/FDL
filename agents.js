@@ -248,6 +248,24 @@ function injectComicLabelStyles(frameDoc) {
   const style = frameDoc.createElement("style");
   style.id = "fdl-comic-agent-labels";
   style.textContent = `
+    [style*="--pixel-overlay-selected-z"] {
+      color: #ffffff !important;
+    }
+
+    [style*="--pixel-overlay-selected-z"] * {
+      color: #ffffff !important;
+      fill: #ffffff !important;
+      stroke: #ffffff !important;
+      -webkit-text-fill-color: #ffffff !important;
+      opacity: 1 !important;
+    }
+
+    [style*="--pixel-overlay-selected-z"] > div {
+      background: #0b0b0b !important;
+      border: 2px solid #ffffff !important;
+      box-shadow: 2px 2px 0 #000000 !important;
+    }
+
     div[style*="pointer-events: none"][style*="z-index: 40"][style*="translateX(-50%)"] {
       transform: translateX(18px) !important;
     }
