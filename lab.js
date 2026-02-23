@@ -922,16 +922,7 @@ async function runScreen() {
       columns: metricColumns
     };
 
-    const response = await fetch("/api/screener/query", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(request)
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    const payload = await response.json();
+    const payload = await postScreenerQuery(request);
     const items = payload.items || [];
     state.lastItems = items;
 
@@ -951,6 +942,48 @@ async function runScreen() {
     setStatus(`Screen failed: ${error.message}. Make sure you started: python3 terminal_server.py`, "error");
   } finally {
     dom.runBtn.disabled = false;
+  }
+}
+
+async function postScreenerQuery(request) {
+  const endpoints = ["/api/v2/screener/query", "/api/screener/query"];
+  const failures = [];
+
+  for (const endpoint of endpoints) {
+    let response;
+    try {
+      response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request)
+      });
+    } catch (error) {
+      failures.push(`${endpoint} network error (${error.message})`);
+      continue;
+    }
+
+    if (response.ok) {
+      return response.json();
+    }
+
+    if (response.status === 404 || response.status === 405 || response.status === 501) {
+      failures.push(`${endpoint} HTTP ${response.status}`);
+      continue;
+    }
+
+    const details = await safeReadResponseText(response);
+    throw new Error(details ? `${endpoint} HTTP ${response.status}: ${details}` : `${endpoint} HTTP ${response.status}`);
+  }
+
+  throw new Error(`No screener endpoint available (${failures.join("; ")})`);
+}
+
+async function safeReadResponseText(response) {
+  try {
+    const raw = await response.text();
+    return String(raw || "").trim().slice(0, 200);
+  } catch (_error) {
+    return "";
   }
 }
 
