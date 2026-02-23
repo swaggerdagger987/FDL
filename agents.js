@@ -191,7 +191,19 @@ function setupAgentControls() {
       injectComicLabelStyles(frameDoc);
       enforceSelectedPopupContrast(frameDoc);
     });
-    observer.observe(frameDoc.body, { childList: true, subtree: true });
+    observer.observe(frameDoc.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["style", "class"],
+      characterData: true,
+    });
+
+    if (!frameWin.__fdlPopupContrastInterval) {
+      frameWin.__fdlPopupContrastInterval = frameWin.setInterval(() => {
+        enforceSelectedPopupContrast(frameDoc);
+      }, 180);
+    }
   }
 
   iframe.addEventListener("load", enhanceFrameUi);
@@ -307,12 +319,13 @@ function enforceSelectedPopupContrast(frameDoc) {
       continue;
     }
     box.style.color = "#ffffff";
+    box.style.setProperty("color", "#ffffff", "important");
 
     const bubble = box.firstElementChild;
     if (bubble instanceof HTMLElement) {
-      bubble.style.background = "#0b0b0b";
-      bubble.style.border = "2px solid #ffffff";
-      bubble.style.color = "#ffffff";
+      bubble.style.setProperty("background", "#0b0b0b", "important");
+      bubble.style.setProperty("border", "2px solid #ffffff", "important");
+      bubble.style.setProperty("color", "#ffffff", "important");
     }
 
     const descendants = box.querySelectorAll("*");
@@ -320,13 +333,14 @@ function enforceSelectedPopupContrast(frameDoc) {
       if (!(node instanceof HTMLElement)) {
         continue;
       }
-      node.style.color = "#ffffff";
-      node.style.fill = "#ffffff";
-      node.style.stroke = "#ffffff";
-      node.style.webkitTextFillColor = "#ffffff";
+      node.style.setProperty("color", "#ffffff", "important");
+      node.style.setProperty("fill", "#ffffff", "important");
+      node.style.setProperty("stroke", "#ffffff", "important");
+      node.style.setProperty("-webkit-text-fill-color", "#ffffff", "important");
+      node.style.setProperty("opacity", "1", "important");
       if (node.tagName === "BUTTON") {
-        node.style.background = "#0b0b0b";
-        node.style.border = "1px solid #ffffff";
+        node.style.setProperty("background", "#0b0b0b", "important");
+        node.style.setProperty("border", "1px solid #ffffff", "important");
       }
     }
   }
