@@ -3,6 +3,8 @@ import { bindConnectButton, hydrateHeader } from "./site_state.js";
 const AGENT_CONFIG_STORAGE_KEY = "fdl.agentConfigs.v1";
 const DEFAULT_MODEL = "openai/gpt-4o-mini";
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1/chat/completions";
+const AGENT_RESPONSE_TIMEOUT_MS = 20000;
+const PROVIDER_TIMEOUT_SECONDS = 18;
 const AGENT_DEFINITIONS = [
   {
     id: 1,
@@ -480,6 +482,7 @@ async function loadPersonaPrompt(agent) {
 }
 
 async function requestAgentRecommendation({ apiKey, model, baseUrl, persona, scenarioText, agent, username, peerInsights }) {
+  const startedAt = Date.now();
   const rules = [
     "Hard rules:",
     "- Keep every point at a maximum of 140 characters.",
@@ -547,8 +550,9 @@ async function requestAgentRecommendation({ apiKey, model, baseUrl, persona, sce
     persona,
     scenario: userPrompt,
     temperature: 0.3,
+    timeout_seconds: PROVIDER_TIMEOUT_SECONDS,
   };
-  const response = await postAgentRequest(requestBody);
+  const response = await postAgentRequest(requestBody, AGENT_RESPONSE_TIMEOUT_MS);
 
   if (!response.ok) {
     const details = await safeReadResponseText(response);
@@ -559,6 +563,7 @@ async function requestAgentRecommendation({ apiKey, model, baseUrl, persona, sce
   if (typeof content === "string" && content.trim()) {
     content = content.trim();
     if (agent.name === "Dr. Dolphin" && !hasRequiredDrDolphinMedicalSections(content)) {
+      const remainingMs = AGENT_RESPONSE_TIMEOUT_MS - (Date.now() - startedAt);
       const correctionPrompt = [
         userPrompt,
         "",
@@ -573,15 +578,20 @@ async function requestAgentRecommendation({ apiKey, model, baseUrl, persona, sce
         content,
       ].join("\n");
 
-      const correctionResponse = await postAgentRequest({
-        ...requestBody,
-        scenario: correctionPrompt,
-      });
-      if (correctionResponse.ok) {
-        const correctionPayload = await correctionResponse.json();
-        const corrected = String(correctionPayload?.text || "").trim();
-        if (corrected) {
-          content = corrected;
+      if (remainingMs > 4500) {
+        const correctionResponse = await postAgentRequest(
+          {
+            ...requestBody,
+            scenario: correctionPrompt,
+          },
+          remainingMs
+        );
+        if (correctionResponse.ok) {
+          const correctionPayload = await correctionResponse.json();
+          const corrected = String(correctionPayload?.text || "").trim();
+          if (corrected) {
+            content = corrected;
+          }
         }
       }
     }
@@ -590,7 +600,8 @@ async function requestAgentRecommendation({ apiKey, model, baseUrl, persona, sce
   throw new Error("No message content in model response.");
 }
 
-async function postAgentRequest(body) {
+async function postAgentRequest(body, timeoutMs = AGENT_RESPONSE_TIMEOUT_MS) {
+  const requestStart = Date.now();
   const endpoints = ["/api/agents/recommend"];
   const isSecurePage = window.location.protocol === "https:";
   if (!isSecurePage) {
@@ -600,16 +611,34 @@ async function postAgentRequest(body) {
 
   const failures = [];
   for (const endpoint of endpoints) {
+    const elapsed = Date.now() - requestStart;
+    const remaining = timeoutMs - elapsed;
+    if (remaining <= 0) {
+      break;
+    }
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), remaining);
     try {
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
+      window.clearTimeout(timeoutId);
       return response;
     } catch (error) {
-      failures.push(`${endpoint} => ${error instanceof Error ? error.message : String(error)}`);
+      window.clearTimeout(timeoutId);
+      if (error instanceof DOMException && error.name === "AbortError") {
+        failures.push(`${endpoint} => timed out after ${Math.ceil(remaining / 1000)}s`);
+      } else {
+        failures.push(`${endpoint} => ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
+  }
+
+  if (Date.now() - requestStart >= timeoutMs) {
+    throw new Error(`Agent request timed out after ${Math.ceil(timeoutMs / 1000)} seconds`);
   }
 
   throw new Error(

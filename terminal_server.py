@@ -302,6 +302,12 @@ class TerminalRequestHandler(SimpleHTTPRequestHandler):
                     persona = str(body.get("persona", "")).strip()
                     scenario = str(body.get("scenario", "")).strip()
                     base_url = str(body.get("base_url", "")).strip() or "https://openrouter.ai/api/v1/chat/completions"
+                    timeout_raw = body.get("timeout_seconds", 18)
+                    try:
+                        provider_timeout_seconds = int(timeout_raw)
+                    except (TypeError, ValueError):
+                        provider_timeout_seconds = 18
+                    provider_timeout_seconds = max(5, min(provider_timeout_seconds, 20))
 
                     if not api_key:
                         self.send_json(400, {"error": "api_key is required"})
@@ -336,7 +342,7 @@ class TerminalRequestHandler(SimpleHTTPRequestHandler):
                         method="POST",
                     )
                     try:
-                        with urlopen(request, timeout=60) as response:
+                        with urlopen(request, timeout=provider_timeout_seconds) as response:
                             raw = response.read().decode("utf-8")
                     except urllib.error.HTTPError as error:
                         details = error.read().decode("utf-8", errors="ignore")
