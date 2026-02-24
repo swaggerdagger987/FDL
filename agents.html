@@ -420,6 +420,12 @@
       gap: 8px;
     }
 
+    .scenario-inline {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: minmax(180px, 280px) 1fr;
+    }
+
     .scenario-label {
       font-family: "Manrope", sans-serif;
       font-size: 0.78rem;
@@ -576,8 +582,14 @@
           Run each LLM agent below to get role-specific actions and insight.
         </p>
         <div class="scenario-input-wrap">
+          <div class="scenario-inline">
+            <div>
+              <label class="scenario-label" for="scenario-username">Username</label>
+              <input id="scenario-username" class="agent-key-input" type="text" autocomplete="off" placeholder="Manager" />
+            </div>
+          </div>
           <label class="scenario-label" for="scenario-input">Scenario Prompt</label>
-          <textarea id="scenario-input" class="scenario-input">A verified Thursday tweet reports Bijan Robinson suffered a midweek injury and may miss Sunday. I need immediate moves for a competitive PPR redraft roster with limited bench depth.</textarea>
+          <textarea id="scenario-input" class="scenario-input">Updated tweet: Bijan Robinson is trending toward inactive this week. Build actions for Week 8 of last NFL season, assuming our team does not roster Bijan.</textarea>
           <div class="scenario-toolbar">
             <button id="run-all-agents" class="scenario-btn" type="button">Run All 6 Agents</button>
           </div>

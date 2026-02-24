@@ -219,6 +219,7 @@ function setupAgentSimulationPanel() {
   const grid = document.getElementById("scenario-grid");
   const runAllBtn = document.getElementById("run-all-agents");
   const scenarioInput = document.getElementById("scenario-input");
+  const scenarioUsername = document.getElementById("scenario-username");
   const status = document.getElementById("agents-status");
   if (!grid || !runAllBtn || !(scenarioInput instanceof HTMLTextAreaElement)) {
     return;
@@ -249,19 +250,37 @@ function setupAgentSimulationPanel() {
     if (!agentId) {
       return;
     }
-    await runAgentSimulation(agentId, scenarioInput.value.trim());
+    await runAgentSimulation(agentId, scenarioInput.value.trim(), {
+      username: scenarioUsername instanceof HTMLInputElement ? scenarioUsername.value.trim() : "",
+      peerInsights: null,
+    });
   });
 
   runAllBtn.addEventListener("click", async () => {
     const scenario = scenarioInput.value.trim();
+    const username = scenarioUsername instanceof HTMLInputElement ? scenarioUsername.value.trim() : "";
     runAllBtn.disabled = true;
     if (status) {
-      status.textContent = "Running all six agents for the current scenario...";
+      status.textContent = "Running agents 2-6 for Hootsworth synthesis...";
     }
     try {
-      await Promise.all(AGENT_DEFINITIONS.map((agent) => runAgentSimulation(agent.id, scenario)));
+      const peerAgents = AGENT_DEFINITIONS.filter((agent) => agent.name !== "Hootsworth");
+      const peerOutputs = [];
+      for (const agent of peerAgents) {
+        const text = await runAgentSimulation(agent.id, scenario, { username, peerInsights: null });
+        if (text) {
+          peerOutputs.push({ name: agent.name, text });
+        }
+      }
+      const hootsworth = AGENT_DEFINITIONS.find((agent) => agent.name === "Hootsworth");
+      if (hootsworth) {
+        await runAgentSimulation(hootsworth.id, scenario, {
+          username,
+          peerInsights: peerOutputs,
+        });
+      }
       if (status) {
-        status.textContent = "All six agent recommendations are updated.";
+        status.textContent = "All agents updated. Hootsworth synthesized the full recommendation.";
       }
     } finally {
       runAllBtn.disabled = false;
@@ -269,17 +288,17 @@ function setupAgentSimulationPanel() {
   });
 }
 
-async function runAgentSimulation(agentId, scenarioText) {
+async function runAgentSimulation(agentId, scenarioText, options = {}) {
   const agent = AGENT_DEFINITIONS.find((item) => item.id === agentId);
   if (!agent) {
-    return;
+    return null;
   }
 
   const card = document.querySelector(`.scenario-card[data-agent-id="${agentId}"]`);
   const output = card?.querySelector("[data-output]");
   const button = card?.querySelector("button[data-action='run-agent']");
   if (!(output instanceof HTMLElement) || !(button instanceof HTMLButtonElement)) {
-    return;
+    return null;
   }
 
   const config = loadAgentConfig();
@@ -292,17 +311,17 @@ async function runAgentSimulation(agentId, scenarioText) {
 
   if (!apiKey) {
     output.textContent = "No API key saved for this agent. Enter one above, then rerun.";
-    return;
+    return null;
   }
 
   if (looksLikeModelString(apiKey)) {
     output.textContent = "It looks like you entered a model in the API key field. Put your OpenRouter key (sk-or-v1-...) in API key and keep model as e.g. stepfun/step-3.5-flash:free.";
-    return;
+    return null;
   }
 
   if (looksLikeApiKey(model)) {
     output.textContent = "It looks like you entered an API key in the model field. Set model to something like stepfun/step-3.5-flash:free.";
-    return;
+    return null;
   }
 
   if (isOpenRouterModel(model) && !baseUrl.includes("openrouter.ai")) {
@@ -311,11 +330,11 @@ async function runAgentSimulation(agentId, scenarioText) {
 
   if (!scenarioText) {
     output.textContent = "Scenario is empty. Add a scenario prompt and rerun.";
-    return;
+    return null;
   }
 
   if (simulationState.running.has(agentId)) {
-    return;
+    return null;
   }
 
   simulationState.running.add(agentId);
@@ -329,12 +348,17 @@ async function runAgentSimulation(agentId, scenarioText) {
       model,
       baseUrl,
       persona,
-      scenarioText,
+      scenarioText: buildScenarioWithContext(scenarioText),
       agent,
+      username: options.username || "Manager",
+      peerInsights: Array.isArray(options.peerInsights) ? options.peerInsights : null,
     });
-    output.textContent = responseText || "No output returned.";
+    const normalized = enforcePointCharacterLimit(responseText || "No output returned.");
+    output.textContent = normalized;
+    return normalized;
   } catch (error) {
     output.textContent = `Request failed: ${error instanceof Error ? error.message : String(error)}`;
+    return null;
   } finally {
     simulationState.running.delete(agentId);
     button.disabled = false;
@@ -357,15 +381,42 @@ async function loadPersonaPrompt(agent) {
   return text;
 }
 
-async function requestAgentRecommendation({ apiKey, model, baseUrl, persona, scenarioText, agent }) {
+async function requestAgentRecommendation({ apiKey, model, baseUrl, persona, scenarioText, agent, username, peerInsights }) {
+  const rules = [
+    "Hard rules:",
+    "- Keep every point at a maximum of 140 characters.",
+    "- Assume we do NOT roster Bijan Robinson.",
+    "- Assume this is Week 8 of last NFL season.",
+    "- Use last season Week 1-7 trend context to make decisions.",
+  ];
+
+  if (agent.name !== "Hootsworth") {
+    rules.push("- You are advising Hootsworth directly.");
+  } else {
+    rules.push(`- Start with: "Hello ${username}, this is the present situation."`);
+    rules.push("- Include an updated tweet-style injury situation summary.");
+    rules.push("- Regurgitate and synthesize insights from the other agents.");
+  }
+
+  const peerSection = Array.isArray(peerInsights) && peerInsights.length
+    ? [
+      "",
+      "Peer agent recommendations to synthesize:",
+      ...peerInsights.map((item, index) => `${index + 1}. ${item.name}: ${item.text}`),
+    ]
+    : [];
+
   const userPrompt = [
+    ...rules,
     "Scenario:",
     scenarioText,
+    ...peerSection,
     "",
     "Return format:",
-    "1) Recommendation",
-    "2) Immediate next actions",
-    "3) Key risk to monitor in next 24 hours",
+    "1) Point 1",
+    "2) Point 2",
+    "3) Point 3",
+    "4) Point 4",
   ].join("\n");
 
   const requestBody = {
@@ -440,6 +491,30 @@ function looksLikeApiKey(value) {
 function isOpenRouterModel(value) {
   const text = String(value || "").trim();
   return text.includes("/") || text.includes(":free");
+}
+
+function buildScenarioWithContext(baseScenario) {
+  return [
+    "Updated tweet context: Bijan Robinson injury update is active on Thursday and availability is uncertain.",
+    "Team context: we do not roster Bijan Robinson.",
+    "Time context: Week 8 of last NFL season.",
+    "Data context: use last season form and usage trends through Week 7.",
+    "",
+    baseScenario,
+  ].join("\n");
+}
+
+function enforcePointCharacterLimit(text) {
+  const lines = String(text || "").split("\n");
+  return lines
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return line;
+      if (!/^(\d+[.)-]|\-|\*)\s+/.test(trimmed)) return line;
+      if (trimmed.length <= 140) return line;
+      return `${trimmed.slice(0, 137).trimEnd()}...`;
+    })
+    .join("\n");
 }
 
 function setupAgentControls() {
