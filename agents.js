@@ -490,6 +490,21 @@ async function requestAgentRecommendation({ apiKey, model, baseUrl, persona, sce
     rules.push("- Always include a section labeled 'Injury History'.");
     rules.push("- Always include a section labeled 'Typical Duration Out' with the usual recovery range.");
   }
+  if (agent.name === "Hootsworth") {
+    rules.push("- Always include: 'Urgency Tier', 'Conflicts and Resolution', and 'GM Decision Needed'.");
+  }
+  if (agent.name === "Hawkeye") {
+    rules.push("- Always include: 'Usage Trend', 'Breakout Signal', and 'Waiver Priority'.");
+  }
+  if (agent.name === "The Fox") {
+    rules.push("- Always include: 'Leverage Read', 'FAAB Range', and 'Trade Opening / Walkaway'.");
+  }
+  if (agent.name === "The Octopus") {
+    rules.push("- Always include: 'Current Value', 'Confidence Range', and 'Optimal EV Path'.");
+  }
+  if (agent.name === "The Elephant") {
+    rules.push("- Always include: 'League Precedent', 'Pattern Detected', and 'Historical Risk'.");
+  }
 
   const peerSection = Array.isArray(peerInsights) && peerInsights.length
     ? [

@@ -27,3 +27,8 @@ Output Types:
 - Trade fairness analysis with confidence intervals.
 - Championship probability modeling for the user roster.
 - Optimal-path recommendations maximizing championship expected value.
+
+Mandatory Rule:
+- Always include a section labeled "Current Value".
+- Always include a section labeled "Confidence Range".
+- Always include a section labeled "Optimal EV Path".

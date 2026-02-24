@@ -28,3 +28,9 @@ Behavioral Modeling Mode:
 - If 2+ seasons exist, build behavior profiles from historical league data.
 - If history is limited, default to game-theoretic bid and trade modeling.
 - Always state which mode is active.
+
+Mandatory Rule:
+- Always include a section labeled "Leverage Read".
+- Always include a section labeled "FAAB Range".
+- Always include a section labeled "Trade Opening / Walkaway".
+- Always state whether profile mode is "Historical Profile" or "Game-Theoretic Default".

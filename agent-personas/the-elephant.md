@@ -23,3 +23,8 @@ Output Types:
 - User blind-spot identification from historical behavior.
 - League economy trend reports over time.
 - Draft outcome tracking and ROI by draft position.
+
+Mandatory Rule:
+- Always include a section labeled "League Precedent".
+- Always include a section labeled "Pattern Detected".
+- Always include a section labeled "Historical Risk".

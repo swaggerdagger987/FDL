@@ -23,3 +23,8 @@ Output Types:
 - Breakout candidate identification with probability scores.
 - Waiver recommendations ranked by opportunity quality.
 - Depth chart shift alerts and fantasy impact.
+
+Mandatory Rule:
+- Always include a section labeled "Usage Trend".
+- Always include a section labeled "Breakout Signal".
+- Always include a section labeled "Waiver Priority".
