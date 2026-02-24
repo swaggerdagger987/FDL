@@ -319,7 +319,7 @@ function setupAgentSimulationPanel() {
       <p class="scenario-role">${escapeHtml(agent.role)}</p>
       <p class="scenario-insight">${escapeHtml(agent.purpose)}</p>
       <div class="scenario-toolbar">
-        <button class="scenario-btn" type="button" data-action="run-agent">Run ${escapeHtml(agent.name)}</button>
+        <button class="scenario-btn" type="button" data-action="run-agent">Run Full Agent Team</button>
       </div>
       <pre class="scenario-output" data-output>Ready. Add API key in the panel above and run this agent.</pre>
     </article>
@@ -338,42 +338,54 @@ function setupAgentSimulationPanel() {
     if (!agentId) {
       return;
     }
-    await runAgentSimulation(agentId, scenarioInput.value.trim(), {
-      username: scenarioUsername instanceof HTMLInputElement ? scenarioUsername.value.trim() : "",
-      peerInsights: null,
+    await runAllAgentsWorkflow({
+      scenarioInput,
+      scenarioUsername,
+      runAllBtn,
+      status,
     });
   });
 
   runAllBtn.addEventListener("click", async () => {
-    const scenario = scenarioInput.value.trim();
-    const username = scenarioUsername instanceof HTMLInputElement ? scenarioUsername.value.trim() : "";
-    runAllBtn.disabled = true;
-    if (status) {
-      status.textContent = "Running agents 2-6 for Hootsworth synthesis...";
-    }
-    try {
-      const peerAgents = AGENT_DEFINITIONS.filter((agent) => agent.name !== "Hootsworth");
-      const peerOutputs = [];
-      for (const agent of peerAgents) {
-        const text = await runAgentSimulation(agent.id, scenario, { username, peerInsights: null });
-        if (text) {
-          peerOutputs.push({ name: agent.name, text });
-        }
-      }
-      const hootsworth = AGENT_DEFINITIONS.find((agent) => agent.name === "Hootsworth");
-      if (hootsworth) {
-        await runAgentSimulation(hootsworth.id, scenario, {
-          username,
-          peerInsights: peerOutputs,
-        });
-      }
-      if (status) {
-        status.textContent = "All agents updated. Hootsworth synthesized the full recommendation.";
-      }
-    } finally {
-      runAllBtn.disabled = false;
-    }
+    await runAllAgentsWorkflow({
+      scenarioInput,
+      scenarioUsername,
+      runAllBtn,
+      status,
+    });
   });
+}
+
+async function runAllAgentsWorkflow({ scenarioInput, scenarioUsername, runAllBtn, status }) {
+  const scenario = scenarioInput instanceof HTMLTextAreaElement ? scenarioInput.value.trim() : "";
+  const username = scenarioUsername instanceof HTMLInputElement ? scenarioUsername.value.trim() : "";
+  runAllBtn.disabled = true;
+  if (status) {
+    status.textContent = "Running full agent team in parallel...";
+  }
+  try {
+    const peerAgents = AGENT_DEFINITIONS.filter((agent) => agent.name !== "Hootsworth");
+    const peerResults = await Promise.all(
+      peerAgents.map(async (agent) => {
+        const text = await runAgentSimulation(agent.id, scenario, { username, peerInsights: null });
+        return text ? { name: agent.name, text } : null;
+      })
+    );
+    const peerOutputs = peerResults.filter(Boolean);
+
+    const hootsworth = AGENT_DEFINITIONS.find((agent) => agent.name === "Hootsworth");
+    if (hootsworth) {
+      await runAgentSimulation(hootsworth.id, scenario, {
+        username,
+        peerInsights: peerOutputs,
+      });
+    }
+    if (status) {
+      status.textContent = "Full team complete. Hootsworth has synthesized all specialist recommendations.";
+    }
+  } finally {
+    runAllBtn.disabled = false;
+  }
 }
 
 async function runAgentSimulation(agentId, scenarioText, options = {}) {
