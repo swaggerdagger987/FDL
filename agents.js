@@ -68,11 +68,19 @@ function setupAgentConfigPanel() {
   const iframe = document.getElementById("agents-iframe");
   const allKeyInput = document.getElementById("all-agent-key");
   const saveAllButton = document.getElementById("save-all-agent-keys");
+  const allModelInput = document.getElementById("all-agent-model");
+  const saveAllModelButton = document.getElementById("save-all-agent-model");
   if (!cardsHost) {
     return;
   }
 
   const config = loadAgentConfig();
+  if (allModelInput instanceof HTMLInputElement) {
+    const firstAgentModel = config[String(AGENT_DEFINITIONS[0]?.id)]?.model;
+    allModelInput.value = typeof firstAgentModel === "string" && firstAgentModel.trim()
+      ? firstAgentModel.trim()
+      : DEFAULT_MODEL;
+  }
   cardsHost.innerHTML = AGENT_DEFINITIONS.map((agent) => {
     const existing = config[String(agent.id)] || {};
     const apiKey = typeof existing.apiKey === "string" ? existing.apiKey : "";
@@ -150,6 +158,31 @@ function setupAgentConfigPanel() {
       }
       if (iframe instanceof HTMLIFrameElement && iframe.contentWindow) {
         iframe.contentWindow.location.reload();
+      }
+    });
+  }
+
+  if (allModelInput instanceof HTMLInputElement && saveAllModelButton instanceof HTMLButtonElement) {
+    saveAllModelButton.addEventListener("click", () => {
+      const sharedModel = allModelInput.value.trim();
+      if (!sharedModel) {
+        if (status) {
+          status.textContent = "Enter a model first, then click Apply Model To All 6.";
+        }
+        return;
+      }
+      const current = loadAgentConfig();
+      for (const agent of AGENT_DEFINITIONS) {
+        const existing = current[String(agent.id)] || {};
+        current[String(agent.id)] = {
+          apiKey: typeof existing.apiKey === "string" ? existing.apiKey : "",
+          model: sharedModel,
+          baseUrl: typeof existing.baseUrl === "string" && existing.baseUrl.trim() ? existing.baseUrl : DEFAULT_BASE_URL
+        };
+      }
+      localStorage.setItem(AGENT_CONFIG_STORAGE_KEY, JSON.stringify(current));
+      if (status) {
+        status.textContent = `Applied model "${sharedModel}" to all six agents.`;
       }
     });
   }

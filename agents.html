@@ -345,6 +345,10 @@
       align-items: end;
     }
 
+    .agent-global-row--model {
+      margin-top: 8px;
+    }
+
     .agents-scenario {
       margin-top: 18px;
       border-radius: 16px;
@@ -554,6 +558,13 @@
             <input id="all-agent-key" class="agent-key-input" type="password" autocomplete="off" placeholder="sk-or-v1-..." />
           </div>
           <button id="save-all-agent-keys" class="agent-save-btn" type="button">Apply To All 6</button>
+        </div>
+        <div class="agent-global-row agent-global-row--model">
+          <div>
+            <label class="agent-key-label" for="all-agent-model">One Model For All Agents</label>
+            <input id="all-agent-model" class="agent-key-input" type="text" autocomplete="off" placeholder="openai/gpt-4o-mini" />
+          </div>
+          <button id="save-all-agent-model" class="agent-save-btn" type="button">Apply Model To All 6</button>
         </div>
         <div id="agent-cards" class="agent-cards"></div>
       </section>
