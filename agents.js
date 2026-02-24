@@ -9,6 +9,7 @@ const AGENT_DEFINITIONS = [
     name: "Hootsworth",
     role: "Chief of Staff",
     purpose: "Central coordinator that triages all agent signals, resolves conflicts, and briefs the GM by urgency.",
+    avatarPath: "./pixel-agents/assets/characters/char_0.png",
     promptPath: "./agent-personas/hootsworth.md"
   },
   {
@@ -16,6 +17,7 @@ const AGENT_DEFINITIONS = [
     name: "Dr. Dolphin",
     role: "Medical Analyst",
     purpose: "Injury desk for status clarity, return timelines, confidence ranges, and post-return performance impact.",
+    avatarPath: "./pixel-agents/assets/characters/char_1.png",
     promptPath: "./agent-personas/dr-dolphin.md"
   },
   {
@@ -23,6 +25,7 @@ const AGENT_DEFINITIONS = [
     name: "Hawkeye",
     role: "Scout",
     purpose: "Usage and talent evaluator that flags breakouts, role shifts, and waiver targets before the market reacts.",
+    avatarPath: "./pixel-agents/assets/characters/char_2.png",
     promptPath: "./agent-personas/hawkeye.md"
   },
   {
@@ -30,6 +33,7 @@ const AGENT_DEFINITIONS = [
     name: "The Fox",
     role: "Diplomat (Adversarial Intelligence)",
     purpose: "Leaguemate and market strategist focused on trade leverage, FAAB game theory, and negotiation timing.",
+    avatarPath: "./pixel-agents/assets/characters/char_3.png",
     promptPath: "./agent-personas/the-fox.md"
   },
   {
@@ -37,6 +41,7 @@ const AGENT_DEFINITIONS = [
     name: "The Octopus",
     role: "Quant (Valuations and Modeling)",
     purpose: "Valuation and probability engine for player/pick pricing, trade fairness, title odds, and EV-max paths.",
+    avatarPath: "./pixel-agents/assets/characters/char_4.png",
     promptPath: "./agent-personas/the-octopus.md"
   },
   {
@@ -44,6 +49,7 @@ const AGENT_DEFINITIONS = [
     name: "The Elephant",
     role: "Historian (League Memory)",
     purpose: "Institutional memory that maps league precedents, manager tendencies, and long-cycle market patterns.",
+    avatarPath: "./pixel-agents/assets/characters/char_5.png",
     promptPath: "./agent-personas/the-elephant.md"
   }
 ];
@@ -58,8 +64,89 @@ function initialize() {
   hydrateHeader("agents");
   bindConnectButton();
   setupAgentConfigPanel();
+  setupAgentBioPanel();
   setupAgentSimulationPanel();
   setupAgentControls();
+}
+
+async function setupAgentBioPanel() {
+  const host = document.getElementById("agents-bio-list");
+  if (!host) {
+    return;
+  }
+
+  host.innerHTML = AGENT_DEFINITIONS.map((agent) => `
+    <article class="agent-bio-row" data-agent-bio="${agent.id}">
+      <div class="agent-bio-visual">
+        <img class="agent-bio-avatar" src="${escapeAttribute(agent.avatarPath)}" alt="${escapeAttribute(agent.name)} pixel avatar" />
+      </div>
+      <div class="agent-bio-body">
+        <div class="agent-bio-head">
+          <h3 class="agent-bio-name">${escapeHtml(agent.name)}</h3>
+          <p class="agent-bio-role">${escapeHtml(agent.role)}</p>
+        </div>
+        <p class="agent-bio-summary">${escapeHtml(agent.purpose)}</p>
+        <ul class="agent-bio-points">
+          <li>Loading persona quick notes...</li>
+        </ul>
+      </div>
+    </article>
+  `).join("");
+
+  await Promise.all(
+    AGENT_DEFINITIONS.map(async (agent) => {
+      const row = host.querySelector(`[data-agent-bio="${agent.id}"]`);
+      if (!(row instanceof HTMLElement)) {
+        return;
+      }
+      const list = row.querySelector(".agent-bio-points");
+      if (!(list instanceof HTMLUListElement)) {
+        return;
+      }
+      try {
+        const persona = await loadPersonaPrompt(agent);
+        const points = buildQuickBioPoints(persona);
+        list.innerHTML = points.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+      } catch (_error) {
+        list.innerHTML = "<li>Persona summary unavailable. Using role definition only.</li>";
+      }
+    })
+  );
+}
+
+function buildQuickBioPoints(markdown) {
+  const rolePoints = extractSectionBullets(markdown, "Role");
+  const voicePoints = extractSectionBullets(markdown, "Voice");
+  const accessPoints = extractSectionBullets(markdown, "Data Access");
+
+  const output = [];
+  if (rolePoints.length > 0) output.push(`Mission: ${rolePoints[0]}`);
+  if (voicePoints.length > 0) output.push(`Voice: ${voicePoints[0]}`);
+  if (accessPoints.length > 0) output.push(`Data: ${accessPoints[0]}`);
+
+  if (output.length === 0) {
+    return ["Specialist front-office agent with role-based decision support."];
+  }
+  return output.slice(0, 3);
+}
+
+function extractSectionBullets(markdown, sectionName) {
+  const lines = String(markdown || "").split(/\r?\n/);
+  const start = lines.findIndex((line) => line.trim().toLowerCase() === `${sectionName.toLowerCase()}:`);
+  if (start < 0) return [];
+  const collected = [];
+  for (let i = start + 1; i < lines.length; i += 1) {
+    const line = lines[i].trim();
+    if (!line) {
+      if (collected.length > 0) break;
+      continue;
+    }
+    if (/^[A-Za-z].*:$/.test(line)) break;
+    if (line.startsWith("- ")) {
+      collected.push(line.slice(2).trim());
+    }
+  }
+  return collected;
 }
 
 function setupAgentConfigPanel() {

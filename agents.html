@@ -494,6 +494,165 @@
       min-height: 130px;
     }
 
+    .agents-bio-panel {
+      margin-top: 18px;
+      border: 1px solid rgba(37, 51, 39, 0.42);
+      border-radius: 16px;
+      background: linear-gradient(180deg, rgba(251, 245, 227, 0.97), rgba(240, 228, 193, 0.95));
+      box-shadow: var(--shadow-sm);
+      padding: clamp(12px, 2vw, 18px);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .agents-bio-panel::before {
+      content: "";
+      position: absolute;
+      top: -8px;
+      right: 18px;
+      width: 94px;
+      height: 16px;
+      border-radius: 4px;
+      background: linear-gradient(90deg, rgba(103, 180, 218, 0.52), rgba(103, 180, 218, 0.16));
+      opacity: 0.76;
+      transform: rotate(-3.2deg);
+      pointer-events: none;
+    }
+
+    .agents-bio-tabs {
+      display: inline-flex;
+      border: 1px solid rgba(42, 55, 42, 0.24);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.66);
+      padding: 4px;
+      margin-bottom: 10px;
+    }
+
+    .agents-bio-tab-btn {
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: #30422f;
+      font-family: "Manrope", sans-serif;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 7px 12px;
+    }
+
+    .agents-bio-tab-btn.is-active {
+      background: linear-gradient(152deg, rgba(232, 113, 34, 0.28), rgba(242, 163, 94, 0.44));
+      color: #3b2613;
+    }
+
+    .agents-bio-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .agent-bio-row {
+      display: grid;
+      grid-template-columns: 130px 1fr;
+      gap: 12px;
+      align-items: stretch;
+      border: 1px solid rgba(37, 51, 39, 0.26);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.6);
+      padding: 10px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .agent-bio-visual {
+      border: 1px dashed rgba(37, 51, 39, 0.24);
+      border-radius: 10px;
+      background: linear-gradient(160deg, rgba(234, 228, 206, 0.92), rgba(220, 209, 171, 0.92));
+      display: grid;
+      place-items: center;
+      min-height: 104px;
+    }
+
+    .agent-bio-avatar {
+      width: 86px;
+      height: 86px;
+      image-rendering: pixelated;
+      object-fit: contain;
+      filter: drop-shadow(0 5px 4px rgba(31, 41, 31, 0.24));
+      animation: bioFloat 1.2s steps(2, end) infinite;
+    }
+
+    @keyframes bioFloat {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-3px); }
+    }
+
+    .agent-bio-body {
+      min-width: 0;
+    }
+
+    .agent-bio-head {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 4px;
+    }
+
+    .agent-bio-name {
+      margin: 0;
+      font-family: "Permanent Marker", "Space Grotesk", sans-serif;
+      font-size: 1.02rem;
+      color: #243225;
+      transform: rotate(-0.3deg);
+    }
+
+    .agent-bio-role {
+      margin: 0;
+      font-family: "Manrope", sans-serif;
+      font-size: 0.75rem;
+      color: rgba(52, 83, 62, 0.9);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      font-weight: 700;
+    }
+
+    .agent-bio-summary {
+      margin: 0;
+      font-family: "Caveat", "Space Grotesk", sans-serif;
+      font-size: 1.04rem;
+      color: #3d4b3b;
+      line-height: 1.35;
+    }
+
+    .agent-bio-points {
+      margin: 6px 0 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 4px;
+    }
+
+    .agent-bio-points li {
+      font-family: "Manrope", sans-serif;
+      font-size: 0.84rem;
+      color: #334232;
+      line-height: 1.4;
+      position: relative;
+      padding-left: 14px;
+    }
+
+    .agent-bio-points li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.56em;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: rgba(232, 113, 34, 0.78);
+    }
+
     /* Classroom style details aligned with the rest of the app */
     .agents-title,
     .agents-config-title,
@@ -575,6 +734,14 @@
       .agents-frame-wrap {
         min-height: 72vh;
         height: 72vh;
+      }
+
+      .agent-bio-row {
+        grid-template-columns: 1fr;
+      }
+
+      .agent-bio-visual {
+        min-height: 88px;
       }
     }
   </style>
@@ -658,6 +825,14 @@
         <div id="agent-cards" class="agent-cards"></div>
       </section>
 
+      <section class="agents-bio-panel" aria-labelledby="agents-bio-title">
+        <h2 class="agents-config-title" id="agents-bio-title">Agent Bios</h2>
+        <div class="agents-bio-tabs" role="tablist" aria-label="Agent Bio Views">
+          <button class="agents-bio-tab-btn is-active" type="button" role="tab" aria-selected="true">Quick Bio</button>
+        </div>
+        <div id="agents-bio-list" class="agents-bio-list"></div>
+      </section>
+
       <section class="agents-scenario" aria-labelledby="agents-scenario-title">
         <h2 id="agents-scenario-title">Thursday Shock Scenario: Bijan Robinson Injury Tweet</h2>
         <p class="scenario-kicker">
@@ -682,6 +857,6 @@
     </section>
   </main>
 
-  <script type="module" src="./agents.js?v=20260224e"></script>
+  <script type="module" src="./agents.js?v=20260224f"></script>
 </body>
 </html>
