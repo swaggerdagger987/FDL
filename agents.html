@@ -484,6 +484,83 @@
       min-height: 130px;
     }
 
+    /* Classroom style details aligned with the rest of the app */
+    .agents-title,
+    .agents-config-title,
+    .agents-scenario h2,
+    .agent-card h3,
+    .scenario-card h3 {
+      font-family: "Permanent Marker", "Space Grotesk", sans-serif;
+      font-weight: 400;
+      letter-spacing: 0.02em;
+      transform: rotate(-0.35deg);
+    }
+
+    .agents-kicker,
+    .agents-subtitle,
+    .agents-config-subtitle,
+    .scenario-kicker,
+    .agent-purpose,
+    .scenario-insight {
+      font-family: "Caveat", "Space Grotesk", sans-serif;
+      font-size: 1.06rem;
+      letter-spacing: 0.01em;
+    }
+
+    .agents-stage,
+    .agents-config-panel,
+    .agents-scenario,
+    .agent-card,
+    .scenario-card {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .agents-stage::before,
+    .agents-config-panel::before,
+    .agents-scenario::before,
+    .agent-card::before,
+    .scenario-card::before {
+      content: "";
+      position: absolute;
+      top: -8px;
+      right: 18px;
+      width: 94px;
+      height: 16px;
+      border-radius: 4px;
+      background: linear-gradient(90deg, rgba(103, 180, 218, 0.52), rgba(103, 180, 218, 0.16));
+      opacity: 0.76;
+      transform: rotate(-3.2deg);
+      pointer-events: none;
+    }
+
+    .agents-stage::after,
+    .agents-config-panel::after,
+    .agents-scenario::after,
+    .agent-card::after,
+    .scenario-card::after {
+      content: "";
+      position: absolute;
+      inset: 10px;
+      border: 1px dashed rgba(38, 50, 39, 0.13);
+      border-radius: inherit;
+      pointer-events: none;
+    }
+
+    .agent-card:nth-child(3n + 2)::before,
+    .scenario-card:nth-child(3n + 2)::before {
+      left: 14px;
+      right: auto;
+      background: linear-gradient(90deg, rgba(247, 230, 106, 0.62), rgba(247, 230, 106, 0.22));
+      transform: rotate(2.4deg);
+    }
+
+    .agent-card:nth-child(3n)::before,
+    .scenario-card:nth-child(3n)::before {
+      background: linear-gradient(90deg, rgba(244, 175, 194, 0.56), rgba(244, 175, 194, 0.2));
+      transform: rotate(-1.4deg);
+    }
+
     @media (max-width: 900px) {
       .agents-frame-wrap {
         min-height: 72vh;
