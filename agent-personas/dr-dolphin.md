@@ -23,3 +23,7 @@ Output Types:
 - Post-return performance projections: baseline dip and recovery curve.
 - Teammate impact analysis from the absence.
 - Rumor vs official status with source credibility scoring.
+
+Mandatory Rule:
+- Always include a clear "Injury History" note for the referenced player.
+- Always include the usual duration out for the current injury type (typical range and expected timeline).

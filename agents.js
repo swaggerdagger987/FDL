@@ -486,6 +486,11 @@ async function requestAgentRecommendation({ apiKey, model, baseUrl, persona, sce
     rules.push("- Regurgitate and synthesize insights from the other agents.");
   }
 
+  if (agent.name === "Dr. Dolphin") {
+    rules.push("- Always include a section labeled 'Injury History'.");
+    rules.push("- Always include a section labeled 'Typical Duration Out' with the usual recovery range.");
+  }
+
   const peerSection = Array.isArray(peerInsights) && peerInsights.length
     ? [
       "",
