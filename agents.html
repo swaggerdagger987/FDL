@@ -337,6 +337,71 @@
       background: rgba(27, 74, 103, 0.95);
     }
 
+    .agents-scenario {
+      margin-top: 18px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(8, 13, 22, 0.82);
+      padding: clamp(12px, 2vw, 18px);
+      box-shadow: inset 0 0 0 1px rgba(255, 139, 87, 0.14);
+    }
+
+    .agents-scenario h2 {
+      margin: 0;
+      font-family: "Bebas Neue", sans-serif;
+      letter-spacing: 0.04em;
+      font-size: clamp(1.7rem, 4vw, 2.2rem);
+      color: #fff2ea;
+    }
+
+    .scenario-kicker {
+      margin: 6px 0 0;
+      font-family: "Manrope", sans-serif;
+      font-size: 0.95rem;
+      color: rgba(233, 224, 217, 0.9);
+      line-height: 1.5;
+    }
+
+    .scenario-grid {
+      margin-top: 14px;
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    }
+
+    .scenario-card {
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 12px;
+      background: rgba(9, 16, 26, 0.92);
+      padding: 12px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .scenario-card h3 {
+      margin: 0;
+      font-family: "Manrope", sans-serif;
+      font-size: 0.98rem;
+      color: #f6f8ff;
+    }
+
+    .scenario-role {
+      margin: 0;
+      font-family: "Manrope", sans-serif;
+      font-size: 0.8rem;
+      color: rgba(180, 227, 243, 0.95);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+    }
+
+    .scenario-insight {
+      margin: 0;
+      font-family: "Manrope", sans-serif;
+      font-size: 0.86rem;
+      color: rgba(228, 236, 249, 0.9);
+      line-height: 1.45;
+    }
+
     @media (max-width: 900px) {
       .agents-frame-wrap {
         min-height: 72vh;
@@ -408,6 +473,45 @@
           Each card explains the agent role. Update API keys here and apply directly to the live map.
         </p>
         <div id="agent-cards" class="agent-cards"></div>
+      </section>
+
+      <section class="agents-scenario" aria-labelledby="agents-scenario-title">
+        <h2 id="agents-scenario-title">Thursday Shock Scenario: Bijan Robinson Injury Tweet</h2>
+        <p class="scenario-kicker">
+          Trigger event: a Thursday afternoon report says Bijan Robinson is expected to miss time. Every agent responds with a role-specific recommendation and immediate action.
+        </p>
+        <div class="scenario-grid">
+          <article class="scenario-card">
+            <h3>Hootsworth</h3>
+            <p class="scenario-role">Strategic Coordinator</p>
+            <p class="scenario-insight">Recommendation: shift to a floor-first weekly plan and lock in guaranteed volume at RB. Next action: set lineup priority order and mark all high-variance flex plays as conditional until final practice reports.</p>
+          </article>
+          <article class="scenario-card">
+            <h3>Dr. Dolphin</h3>
+            <p class="scenario-role">Data Specialist</p>
+            <p class="scenario-insight">Recommendation: project the Arizona backfield split and identify the highest expected touch replacement options. Next action: re-run weekly projections with injury-adjusted usage assumptions and publish updated PPR deltas.</p>
+          </article>
+          <article class="scenario-card">
+            <h3>Hawkeye</h3>
+            <p class="scenario-role">Waiver and Opponent Scanner</p>
+            <p class="scenario-insight">Recommendation: immediately claim the direct backup and block league rivals with secondary contingency adds. Next action: execute waiver queue order, then scan opponent benches for likely counter-moves.</p>
+          </article>
+          <article class="scenario-card">
+            <h3>The Fox</h3>
+            <p class="scenario-role">Trade Negotiator</p>
+            <p class="scenario-insight">Recommendation: send two fast trade packages before market pricing fully adjusts. Next action: target managers with RB surplus and open with 2-for-1 offers that preserve your elite WR core.</p>
+          </article>
+          <article class="scenario-card">
+            <h3>The Octopus</h3>
+            <p class="scenario-role">Scenario Planner</p>
+            <p class="scenario-insight">Recommendation: build three branches: short absence, multi-week IR window, and false-alarm news reversal. Next action: attach lineup, waiver, and FAAB plans to each branch so pivots are instant once official status confirms.</p>
+          </article>
+          <article class="scenario-card">
+            <h3>The Elephant</h3>
+            <p class="scenario-role">Context and Memory Keeper</p>
+            <p class="scenario-insight">Recommendation: use league history to exploit manager tendencies during panic cycles. Next action: surface prior injury-week behaviors, identify overreactive managers, and suggest best timing for buy-low or sell-high counters.</p>
+          </article>
+        </div>
       </section>
     </section>
   </main>
