@@ -87,6 +87,7 @@ function setupAgentConfigPanel() {
     return `
       <article class="agent-card" data-agent-id="${agent.id}">
         <h3>${escapeHtml(agent.name)}</h3>
+        <p class="agent-role">${escapeHtml(agent.role)}</p>
         <p class="agent-purpose">${escapeHtml(agent.purpose)}</p>
         <label class="agent-key-label" for="agent-key-${agent.id}">API Key</label>
         <input
