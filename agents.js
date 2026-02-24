@@ -5,6 +5,8 @@ const DEFAULT_MODEL = "openai/gpt-4o-mini";
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1/chat/completions";
 const AGENT_RESPONSE_TIMEOUT_MS = 20000;
 const PROVIDER_TIMEOUT_SECONDS = 18;
+const BRIEF_MAX_CHARS = 95;
+const BRIEF_MAX_POINTS = 3;
 const AGENT_DEFINITIONS = [
   {
     id: 1,
@@ -58,6 +60,7 @@ const AGENT_DEFINITIONS = [
 const personaCache = new Map();
 const simulationState = {
   running: new Set(),
+  lastByAgent: new Map(),
 };
 
 initialize();
@@ -322,6 +325,7 @@ function setupAgentSimulationPanel() {
       <p class="scenario-insight">${escapeHtml(agent.purpose)}</p>
       <div class="scenario-toolbar">
         <button class="scenario-btn" type="button" data-action="run-agent">Run ${escapeHtml(agent.name)}</button>
+        <button class="scenario-btn-secondary" type="button" data-action="dig-agent" disabled>Dig Further</button>
       </div>
       <pre class="scenario-output" data-output>Ready. Add API key in the panel above and run this agent.</pre>
     </article>
@@ -331,19 +335,30 @@ function setupAgentSimulationPanel() {
     if (!(event.target instanceof Element)) {
       return;
     }
-    const button = event.target.closest("button[data-action='run-agent']");
-    if (!(button instanceof HTMLButtonElement)) {
-      return;
-    }
-    const card = button.closest(".scenario-card");
+    const runButton = event.target.closest("button[data-action='run-agent']");
+    const digButton = event.target.closest("button[data-action='dig-agent']");
+    const card = event.target.closest(".scenario-card");
     const agentId = Number(card?.getAttribute("data-agent-id"));
     if (!agentId) {
       return;
     }
-    await runAgentSimulation(agentId, scenarioInput.value.trim(), {
-      username: scenarioUsername instanceof HTMLInputElement ? scenarioUsername.value.trim() : "",
-      peerInsights: null,
-    });
+    if (runButton instanceof HTMLButtonElement) {
+      await runAgentSimulation(agentId, scenarioInput.value.trim(), {
+        username: scenarioUsername instanceof HTMLInputElement ? scenarioUsername.value.trim() : "",
+        peerInsights: null,
+        mode: "brief",
+      });
+      return;
+    }
+    if (digButton instanceof HTMLButtonElement) {
+      const prior = simulationState.lastByAgent.get(agentId);
+      await runAgentSimulation(agentId, scenarioInput.value.trim(), {
+        username: scenarioUsername instanceof HTMLInputElement ? scenarioUsername.value.trim() : "",
+        peerInsights: null,
+        mode: "dig",
+        previousOutput: prior?.output || "",
+      });
+    }
   });
 
   runAllBtn.addEventListener("click", async () => {
@@ -378,6 +393,7 @@ async function runAllAgentsWorkflow({ scenarioInput, scenarioUsername, runAllBtn
       await runAgentSimulation(hootsworth.id, scenario, {
         username,
         peerInsights: peerOutputs,
+        mode: "brief",
       });
     }
     if (status) {
@@ -397,6 +413,7 @@ async function runAgentSimulation(agentId, scenarioText, options = {}) {
   const card = document.querySelector(`.scenario-card[data-agent-id="${agentId}"]`);
   const output = card?.querySelector("[data-output]");
   const button = card?.querySelector("button[data-action='run-agent']");
+  const digButton = card?.querySelector("button[data-action='dig-agent']");
   if (!(output instanceof HTMLElement) || !(button instanceof HTMLButtonElement)) {
     return null;
   }
@@ -452,9 +469,23 @@ async function runAgentSimulation(agentId, scenarioText, options = {}) {
       agent,
       username: options.username || "Manager",
       peerInsights: Array.isArray(options.peerInsights) ? options.peerInsights : null,
+      mode: options.mode || "brief",
+      previousOutput: options.previousOutput || "",
     });
-    const normalized = enforcePointCharacterLimit(responseText || "No output returned.");
+    const normalized = enforcePointCharacterLimit(
+      responseText || "No output returned.",
+      options.mode === "dig" ? 140 : BRIEF_MAX_CHARS,
+      options.mode === "dig" ? 6 : BRIEF_MAX_POINTS
+    );
     output.textContent = normalized;
+    simulationState.lastByAgent.set(agentId, {
+      output: normalized,
+      scenario: scenarioText,
+      at: Date.now(),
+    });
+    if (digButton instanceof HTMLButtonElement) {
+      digButton.disabled = false;
+    }
     return normalized;
   } catch (error) {
     output.textContent = `Request failed: ${error instanceof Error ? error.message : String(error)}`;
@@ -481,15 +512,34 @@ async function loadPersonaPrompt(agent) {
   return text;
 }
 
-async function requestAgentRecommendation({ apiKey, model, baseUrl, persona, scenarioText, agent, username, peerInsights }) {
+async function requestAgentRecommendation({
+  apiKey,
+  model,
+  baseUrl,
+  persona,
+  scenarioText,
+  agent,
+  username,
+  peerInsights,
+  mode = "brief",
+  previousOutput = "",
+}) {
   const startedAt = Date.now();
   const rules = [
     "Hard rules:",
-    "- Keep every point at a maximum of 140 characters.",
+    mode === "brief"
+      ? `- Keep every point at a maximum of ${BRIEF_MAX_CHARS} characters.`
+      : "- Keep every point at a maximum of 140 characters.",
     "- Assume we do NOT roster Bijan Robinson.",
     "- Assume this is Week 8 of last NFL season.",
     "- Use last season Week 1-7 trend context to make decisions.",
   ];
+  if (mode === "brief") {
+    rules.push("- Return only concise decision points. No long explanations.");
+  }
+  if (mode === "dig") {
+    rules.push("- Add detail and supporting rationale; still stay concise.");
+  }
 
   if (agent.name !== "Hootsworth") {
     rules.push("- You are advising Hootsworth directly.");
@@ -532,15 +582,13 @@ async function requestAgentRecommendation({ apiKey, model, baseUrl, persona, sce
 
   const userPrompt = [
     ...rules,
+    ...(previousOutput ? ["Previous concise output:", previousOutput, "Expand with deeper detail and evidence."] : []),
     "Scenario:",
     scenarioText,
     ...peerSection,
     "",
     "Return format:",
-    "1) Point 1",
-    "2) Point 2",
-    "3) Point 3",
-    "4) Point 4",
+    mode === "brief" ? "1) Point 1\n2) Point 2\n3) Point 3" : "1) Point 1\n2) Point 2\n3) Point 3\n4) Point 4\n5) Point 5\n6) Point 6",
   ].join("\n");
 
   const requestBody = {
@@ -692,17 +740,18 @@ function hasRequiredDrDolphinMedicalSections(text) {
   );
 }
 
-function enforcePointCharacterLimit(text) {
+function enforcePointCharacterLimit(text, maxChars = 140, maxPoints = 4) {
   const lines = String(text || "").split("\n");
-  return lines
+  const normalized = lines
     .map((line) => {
       const trimmed = line.trim();
       if (!trimmed) return line;
       if (!/^(\d+[.)-]|\-|\*)\s+/.test(trimmed)) return line;
-      if (trimmed.length <= 140) return line;
-      return `${trimmed.slice(0, 137).trimEnd()}...`;
+      if (trimmed.length <= maxChars) return line;
+      return `${trimmed.slice(0, Math.max(8, maxChars - 3)).trimEnd()}...`;
     })
-    .join("\n");
+    .filter((line) => line.trim());
+  return normalized.slice(0, maxPoints).join("\n");
 }
 
 function setupAgentControls() {
