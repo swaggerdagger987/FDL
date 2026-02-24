@@ -368,18 +368,15 @@ async function requestAgentRecommendation({ apiKey, model, baseUrl, persona, sce
     "3) Key risk to monitor in next 24 hours",
   ].join("\n");
 
-  const response = await fetch("/api/agents/recommend", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      api_key: apiKey,
-      model,
-      base_url: baseUrl,
-      persona,
-      scenario: userPrompt,
-      temperature: 0.3,
-    }),
-  });
+  const requestBody = {
+    api_key: apiKey,
+    model,
+    base_url: baseUrl,
+    persona,
+    scenario: userPrompt,
+    temperature: 0.3,
+  };
+  const response = await postAgentRequest(requestBody);
 
   if (!response.ok) {
     const details = await safeReadResponseText(response);
@@ -391,6 +388,34 @@ async function requestAgentRecommendation({ apiKey, model, baseUrl, persona, sce
     return content.trim();
   }
   throw new Error("No message content in model response.");
+}
+
+async function postAgentRequest(body) {
+  const endpoints = ["/api/agents/recommend"];
+  const isSecurePage = window.location.protocol === "https:";
+  if (!isSecurePage) {
+    endpoints.push("http://127.0.0.1:8000/api/agents/recommend");
+    endpoints.push("http://localhost:8000/api/agents/recommend");
+  }
+
+  const failures = [];
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      return response;
+    } catch (error) {
+      failures.push(`${endpoint} => ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  throw new Error(
+    `Could not reach agent API from ${window.location.origin || "unknown-origin"}. ` +
+    `Tried: ${failures.join("; ")}`
+  );
 }
 
 async function safeReadResponseText(response) {
