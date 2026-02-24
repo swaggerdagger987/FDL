@@ -7,6 +7,8 @@ const AGENT_RESPONSE_TIMEOUT_MS = 20000;
 const PROVIDER_TIMEOUT_SECONDS = 18;
 const BRIEF_MAX_CHARS = 95;
 const BRIEF_MAX_POINTS = 3;
+const TOTAL_RESPONSE_MAX_CHARS = 300;
+const LOW_SIGNAL_FALLBACK = "Not much for me to comment on in this context.";
 const AGENT_DEFINITIONS = [
   {
     id: 1,
@@ -382,7 +384,11 @@ async function runAllAgentsWorkflow({ scenarioInput, scenarioUsername, runAllBtn
     const peerAgents = AGENT_DEFINITIONS.filter((agent) => agent.name !== "Hootsworth");
     const peerResults = await Promise.all(
       peerAgents.map(async (agent) => {
-        const text = await runAgentSimulation(agent.id, scenario, { username, peerInsights: null });
+        const text = await runAgentSimulation(agent.id, scenario, {
+          username,
+          peerInsights: null,
+          teamMode: true,
+        });
         return text ? { name: agent.name, text } : null;
       })
     );
@@ -394,6 +400,7 @@ async function runAllAgentsWorkflow({ scenarioInput, scenarioUsername, runAllBtn
         username,
         peerInsights: peerOutputs,
         mode: "brief",
+        teamMode: true,
       });
     }
     if (status) {
@@ -471,22 +478,24 @@ async function runAgentSimulation(agentId, scenarioText, options = {}) {
       peerInsights: Array.isArray(options.peerInsights) ? options.peerInsights : null,
       mode: options.mode || "brief",
       previousOutput: options.previousOutput || "",
+      teamMode: Boolean(options.teamMode),
     });
     const normalized = enforcePointCharacterLimit(
       responseText || "No output returned.",
       options.mode === "dig" ? 140 : BRIEF_MAX_CHARS,
       options.mode === "dig" ? 6 : BRIEF_MAX_POINTS
     );
-    output.textContent = normalized;
+    const compact = enforceTotalResponseLimit(normalized, TOTAL_RESPONSE_MAX_CHARS);
+    output.textContent = compact;
     simulationState.lastByAgent.set(agentId, {
-      output: normalized,
+      output: compact,
       scenario: scenarioText,
       at: Date.now(),
     });
     if (digButton instanceof HTMLButtonElement) {
       digButton.disabled = false;
     }
-    return normalized;
+    return compact;
   } catch (error) {
     output.textContent = `Request failed: ${error instanceof Error ? error.message : String(error)}`;
     return null;
@@ -523,6 +532,7 @@ async function requestAgentRecommendation({
   peerInsights,
   mode = "brief",
   previousOutput = "",
+  teamMode = false,
 }) {
   const startedAt = Date.now();
   const rules = [
@@ -530,9 +540,11 @@ async function requestAgentRecommendation({
     mode === "brief"
       ? `- Keep every point at a maximum of ${BRIEF_MAX_CHARS} characters.`
       : "- Keep every point at a maximum of 140 characters.",
+    `- Entire response must be <= ${TOTAL_RESPONSE_MAX_CHARS} characters total.`,
     "- Assume we do NOT roster Bijan Robinson.",
     "- Assume this is Week 8 of last NFL season.",
     "- Use last season Week 1-7 trend context to make decisions.",
+    `- If there is low signal for your role, respond exactly: "${LOW_SIGNAL_FALLBACK}"`,
   ];
   if (mode === "brief") {
     rules.push("- Return only concise decision points. No long explanations.");
@@ -547,6 +559,9 @@ async function requestAgentRecommendation({
     rules.push(`- Start with: "Hello ${username}, this is the present situation."`);
     rules.push("- Include an updated tweet-style injury situation summary.");
     rules.push("- Regurgitate and synthesize insights from the other agents.");
+  }
+  if (teamMode) {
+    rules.push("- Team mode is active: be complementary to other agents and avoid repeating generic points.");
   }
 
   if (agent.name === "Dr. Dolphin") {
@@ -752,6 +767,13 @@ function enforcePointCharacterLimit(text, maxChars = 140, maxPoints = 4) {
     })
     .filter((line) => line.trim());
   return normalized.slice(0, maxPoints).join("\n");
+}
+
+function enforceTotalResponseLimit(text, maxChars = TOTAL_RESPONSE_MAX_CHARS) {
+  const normalized = String(text || "").trim();
+  if (!normalized) return LOW_SIGNAL_FALLBACK;
+  if (normalized.length <= maxChars) return normalized;
+  return `${normalized.slice(0, Math.max(8, maxChars - 3)).trimEnd()}...`;
 }
 
 function setupAgentControls() {
