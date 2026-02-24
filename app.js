@@ -17,6 +17,7 @@ import {
 
 const FREE_DAILY_LIMIT = 3;
 const FREE_USAGE_STORAGE_KEY = "fdl_free_usage";
+const SLEEPER_FETCH_TIMEOUT_MS = 15_000;
 const BYE_WEEKS = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
 const SLEEPER_API_BASE = "https://api.sleeper.app/v1";
 const CATALOG_WARM_LIMIT = 350;
@@ -693,12 +694,16 @@ function upsertCatalogPlayer(player) {
   }
   state.catalogPlayers.push(player);
   state.catalogMap[player.id] = player;
+  const normalized = normalize(player.name);
+  state.playerNameIndex.set(normalized, player.id);
+  state.playerNameIndex.set(normalize(player.name.replace(/\b(jr|sr|ii|iii|iv)\.?$/i, "").trim()), player.id);
   return true;
 }
 
 function rebuildCatalogIndexes() {
   state.catalogMap = Object.fromEntries(state.catalogPlayers.map((player) => [player.id, player]));
-  state.playerNameIndex = buildPlayerNameIndex(state.catalogPlayers);
+  // Name index is kept current incrementally by upsertCatalogPlayer.
+  // Full rebuild only needed on explicit reset (initializeCatalog).
 }
 
 async function probeDatabaseConnection() {
@@ -921,14 +926,20 @@ function getActiveRoster() {
 }
 
 async function fetchSleeperJSON(path) {
-  const response = await fetch(`${SLEEPER_API_BASE}${path}`);
-  if (!response.ok) {
-    if (response.status === 404) {
-      throw new Error("Resource not found.");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SLEEPER_FETCH_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${SLEEPER_API_BASE}${path}`, { signal: controller.signal });
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error("Resource not found.");
+      }
+      throw new Error(`Sleeper API returned ${response.status}.`);
     }
-    throw new Error(`Sleeper API returned ${response.status}.`);
+    return response.json();
+  } finally {
+    clearTimeout(timer);
   }
-  return response.json();
 }
 
 async function loadSleeperPlayerCatalog(requestedIds = []) {
@@ -1654,7 +1665,11 @@ function getFreeUsage() {
   const today = getTodayIso();
   if (state.freeUsage.date !== today) {
     state.freeUsage = { date: today, count: 0 };
-    localStorage.setItem(FREE_USAGE_STORAGE_KEY, JSON.stringify(state.freeUsage));
+    try {
+      localStorage.setItem(FREE_USAGE_STORAGE_KEY, JSON.stringify(state.freeUsage));
+    } catch (_error) {
+      // Non-fatal if storage is unavailable.
+    }
   }
   return state.freeUsage;
 }
@@ -1671,7 +1686,11 @@ function consumeFreeRun() {
     count: Math.min(usage.count + 1, FREE_DAILY_LIMIT)
   };
   state.freeUsage = next;
-  localStorage.setItem(FREE_USAGE_STORAGE_KEY, JSON.stringify(next));
+  try {
+    localStorage.setItem(FREE_USAGE_STORAGE_KEY, JSON.stringify(next));
+  } catch (_error) {
+    // Non-fatal if storage is unavailable.
+  }
 }
 
 function handleFeedbackSubmit(event) {

@@ -11,6 +11,8 @@ export const AGGRESSION_WEIGHTS = {
 
 const TRANSACTION_CACHE_TTL_MS = 10 * 60 * 1000;
 const TRANSACTION_CACHE_KEY_PREFIX = "fdl_tx_cache_v2";
+const TRANSACTION_CACHE_MAX_BYTES = 200_000;
+const SLEEPER_FETCH_CONCURRENCY = 4;
 
 function readLocalCache(key) {
   try {
@@ -26,10 +28,27 @@ function readLocalCache(key) {
 
 function writeLocalCache(key, payload) {
   try {
-    window.localStorage.setItem(key, JSON.stringify(payload));
+    const serialized = JSON.stringify(payload);
+    if (serialized.length > TRANSACTION_CACHE_MAX_BYTES) {
+      return;
+    }
+    window.localStorage.setItem(key, serialized);
   } catch (error) {
     // Storage write errors are non-fatal for analytics.
   }
+}
+
+async function fetchWithConcurrencyLimit(tasks, concurrency) {
+  const results = new Array(tasks.length);
+  let nextIndex = 0;
+  async function worker() {
+    while (nextIndex < tasks.length) {
+      const i = nextIndex++;
+      results[i] = await tasks[i]();
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, worker));
+  return results;
 }
 
 function resolveLeagueStart(startLeagueOrId) {
@@ -88,8 +107,8 @@ export async function fetchAllTransactionsForLeague(leagueId, fetchSleeperJSON, 
   }
 
   const weeks = Array.from({ length: weekCount }, (_, index) => index + 1);
-  const perWeek = await Promise.all(
-    weeks.map(async (week) => {
+  const perWeek = await fetchWithConcurrencyLimit(
+    weeks.map((week) => async () => {
       try {
         const weekTransactions = await fetchSleeperJSON(`/league/${leagueId}/transactions/${week}`);
         if (!Array.isArray(weekTransactions)) return [];
@@ -97,7 +116,8 @@ export async function fetchAllTransactionsForLeague(leagueId, fetchSleeperJSON, 
       } catch (error) {
         return [];
       }
-    })
+    }),
+    SLEEPER_FETCH_CONCURRENCY
   );
   const transactions = perWeek.flat();
   writeLocalCache(key, {
