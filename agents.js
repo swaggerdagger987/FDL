@@ -286,13 +286,27 @@ async function runAgentSimulation(agentId, scenarioText) {
   const agentConfig = config[String(agentId)] || {};
   const apiKey = typeof agentConfig.apiKey === "string" ? agentConfig.apiKey.trim() : "";
   const model = typeof agentConfig.model === "string" && agentConfig.model.trim() ? agentConfig.model.trim() : DEFAULT_MODEL;
-  const baseUrl = typeof agentConfig.baseUrl === "string" && agentConfig.baseUrl.trim()
+  let baseUrl = typeof agentConfig.baseUrl === "string" && agentConfig.baseUrl.trim()
     ? agentConfig.baseUrl.trim()
     : DEFAULT_BASE_URL;
 
   if (!apiKey) {
     output.textContent = "No API key saved for this agent. Enter one above, then rerun.";
     return;
+  }
+
+  if (looksLikeModelString(apiKey)) {
+    output.textContent = "It looks like you entered a model in the API key field. Put your OpenRouter key (sk-or-v1-...) in API key and keep model as e.g. stepfun/step-3.5-flash:free.";
+    return;
+  }
+
+  if (looksLikeApiKey(model)) {
+    output.textContent = "It looks like you entered an API key in the model field. Set model to something like stepfun/step-3.5-flash:free.";
+    return;
+  }
+
+  if (isOpenRouterModel(model) && !baseUrl.includes("openrouter.ai")) {
+    baseUrl = DEFAULT_BASE_URL;
   }
 
   if (!scenarioText) {
@@ -396,6 +410,21 @@ async function safeReadResponseText(response) {
   } catch (_error) {
     return "";
   }
+}
+
+function looksLikeModelString(value) {
+  const text = String(value || "").trim();
+  return text.includes("/") || text.endsWith(":free");
+}
+
+function looksLikeApiKey(value) {
+  const text = String(value || "").trim();
+  return text.startsWith("sk-");
+}
+
+function isOpenRouterModel(value) {
+  const text = String(value || "").trim();
+  return text.includes("/") || text.includes(":free");
 }
 
 function setupAgentControls() {
