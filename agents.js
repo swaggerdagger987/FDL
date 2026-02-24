@@ -8,42 +8,42 @@ const AGENT_DEFINITIONS = [
     id: 1,
     name: "Hootsworth",
     role: "Chief of Staff",
-    purpose: "Orchestration, triage, briefing compilation, and final front-office recommendations.",
+    purpose: "Central coordinator that triages all agent signals, resolves conflicts, and briefs the GM by urgency.",
     promptPath: "./agent-personas/hootsworth.md"
   },
   {
     id: 2,
     name: "Dr. Dolphin",
     role: "Medical Analyst",
-    purpose: "Injury intelligence, recovery timelines, and return-to-play projections.",
+    purpose: "Injury desk for status clarity, return timelines, confidence ranges, and post-return performance impact.",
     promptPath: "./agent-personas/dr-dolphin.md"
   },
   {
     id: 3,
     name: "Hawkeye",
     role: "Scout",
-    purpose: "Player evaluation, usage trends, breakout signals, and waiver opportunity ranking.",
+    purpose: "Usage and talent evaluator that flags breakouts, role shifts, and waiver targets before the market reacts.",
     promptPath: "./agent-personas/hawkeye.md"
   },
   {
     id: 4,
     name: "The Fox",
     role: "Diplomat (Adversarial Intelligence)",
-    purpose: "Leaguemate profiling, trade leverage, FAAB modeling, and negotiation intelligence.",
+    purpose: "Leaguemate and market strategist focused on trade leverage, FAAB game theory, and negotiation timing.",
     promptPath: "./agent-personas/the-fox.md"
   },
   {
     id: 5,
     name: "The Octopus",
     role: "Quant (Valuations and Modeling)",
-    purpose: "Dynasty valuations, pick values, championship odds, and optimal-path modeling.",
+    purpose: "Valuation and probability engine for player/pick pricing, trade fairness, title odds, and EV-max paths.",
     promptPath: "./agent-personas/the-octopus.md"
   },
   {
     id: 6,
     name: "The Elephant",
     role: "Historian (League Memory)",
-    purpose: "Precedent analysis, league memory, and long-horizon pattern recognition."
+    purpose: "Institutional memory that maps league precedents, manager tendencies, and long-cycle market patterns.",
     promptPath: "./agent-personas/the-elephant.md"
   }
 ];
