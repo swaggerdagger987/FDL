@@ -27,3 +27,6 @@ Output Types:
 Mandatory Rule:
 - Always include a clear "Injury History" note for the referenced player.
 - Always include the usual duration out for the current injury type (typical range and expected timeline).
+- Always include a section titled "Injury Type and Mechanism".
+- Always include a section titled "Return-to-Play Risk".
+- If exact case details are limited, state assumptions and still provide medically grounded baseline ranges.

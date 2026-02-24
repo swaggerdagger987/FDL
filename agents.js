@@ -489,6 +489,9 @@ async function requestAgentRecommendation({ apiKey, model, baseUrl, persona, sce
   if (agent.name === "Dr. Dolphin") {
     rules.push("- Always include a section labeled 'Injury History'.");
     rules.push("- Always include a section labeled 'Typical Duration Out' with the usual recovery range.");
+    rules.push("- Always include a section labeled 'Injury Type and Mechanism'.");
+    rules.push("- Always include a section labeled 'Return-to-Play Risk'.");
+    rules.push("- If specifics are uncertain, state assumptions and still provide medical baseline ranges.");
   }
   if (agent.name === "Hootsworth") {
     rules.push("- Always include: 'Urgency Tier', 'Conflicts and Resolution', and 'GM Decision Needed'.");
@@ -542,9 +545,37 @@ async function requestAgentRecommendation({ apiKey, model, baseUrl, persona, sce
     throw new Error(`${agent.name} API error ${response.status}${details ? `: ${details}` : ""}`);
   }
   const payload = await response.json();
-  const content = payload?.text;
+  let content = payload?.text;
   if (typeof content === "string" && content.trim()) {
-    return content.trim();
+    content = content.trim();
+    if (agent.name === "Dr. Dolphin" && !hasRequiredDrDolphinMedicalSections(content)) {
+      const correctionPrompt = [
+        userPrompt,
+        "",
+        "Your previous response missed required medical sections.",
+        "Rewrite now and include these exact headings:",
+        "- Injury Type and Mechanism",
+        "- Injury History",
+        "- Typical Duration Out",
+        "- Return-to-Play Risk",
+        "",
+        "Previous response:",
+        content,
+      ].join("\n");
+
+      const correctionResponse = await postAgentRequest({
+        ...requestBody,
+        scenario: correctionPrompt,
+      });
+      if (correctionResponse.ok) {
+        const correctionPayload = await correctionResponse.json();
+        const corrected = String(correctionPayload?.text || "").trim();
+        if (corrected) {
+          content = corrected;
+        }
+      }
+    }
+    return content;
   }
   throw new Error("No message content in model response.");
 }
@@ -610,6 +641,16 @@ function buildScenarioWithContext(baseScenario) {
     "",
     baseScenario,
   ].join("\n");
+}
+
+function hasRequiredDrDolphinMedicalSections(text) {
+  const value = String(text || "").toLowerCase();
+  return (
+    value.includes("injury type and mechanism") &&
+    value.includes("injury history") &&
+    value.includes("typical duration out") &&
+    value.includes("return-to-play risk")
+  );
 }
 
 function enforcePointCharacterLimit(text) {
