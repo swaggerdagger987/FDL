@@ -319,7 +319,7 @@ function setupAgentSimulationPanel() {
       <p class="scenario-role">${escapeHtml(agent.role)}</p>
       <p class="scenario-insight">${escapeHtml(agent.purpose)}</p>
       <div class="scenario-toolbar">
-        <button class="scenario-btn" type="button" data-action="run-agent">Run Full Agent Team</button>
+        <button class="scenario-btn" type="button" data-action="run-agent">Run ${escapeHtml(agent.name)}</button>
       </div>
       <pre class="scenario-output" data-output>Ready. Add API key in the panel above and run this agent.</pre>
     </article>
@@ -338,11 +338,9 @@ function setupAgentSimulationPanel() {
     if (!agentId) {
       return;
     }
-    await runAllAgentsWorkflow({
-      scenarioInput,
-      scenarioUsername,
-      runAllBtn,
-      status,
+    await runAgentSimulation(agentId, scenarioInput.value.trim(), {
+      username: scenarioUsername instanceof HTMLInputElement ? scenarioUsername.value.trim() : "",
+      peerInsights: null,
     });
   });
 
