@@ -1,38 +1,56 @@
 import { bindConnectButton, hydrateHeader } from "./site_state.js";
 
 const AGENT_CONFIG_STORAGE_KEY = "fdl.agentConfigs.v1";
+const DEFAULT_MODEL = "gpt-4o-mini";
+const DEFAULT_BASE_URL = "https://api.openai.com/v1/chat/completions";
 const AGENT_DEFINITIONS = [
   {
     id: 1,
     name: "Hootsworth",
-    purpose: "Strategic coordinator that sets lineup priorities and balances weekly risk."
+    role: "Strategic Coordinator",
+    purpose: "Strategic coordinator that sets lineup priorities and balances weekly risk.",
+    promptPath: "./agent-personas/hootsworth.md"
   },
   {
     id: 2,
     name: "Dr. Dolphin",
-    purpose: "Data specialist focused on projections, trend shifts, and matchup volatility."
+    role: "Data Specialist",
+    purpose: "Data specialist focused on projections, trend shifts, and matchup volatility.",
+    promptPath: "./agent-personas/dr-dolphin.md"
   },
   {
     id: 3,
     name: "Hawkeye",
-    purpose: "Waiver and opponent scanner that spots immediate tactical opportunities."
+    role: "Waiver and Opponent Scanner",
+    purpose: "Waiver and opponent scanner that spots immediate tactical opportunities.",
+    promptPath: "./agent-personas/hawkeye.md"
   },
   {
     id: 4,
     name: "The Fox",
-    purpose: "Trade negotiator that identifies leverage, pricing edges, and deal timing."
+    role: "Trade Negotiator",
+    purpose: "Trade negotiator that identifies leverage, pricing edges, and deal timing.",
+    promptPath: "./agent-personas/the-fox.md"
   },
   {
     id: 5,
     name: "The Octopus",
-    purpose: "Scenario planner that runs multi-step contingency paths across roster outcomes."
+    role: "Scenario Planner",
+    purpose: "Scenario planner that runs multi-step contingency paths across roster outcomes.",
+    promptPath: "./agent-personas/the-octopus.md"
   },
   {
     id: 6,
     name: "The Elephant",
-    purpose: "Memory and context keeper that tracks long-term league behavior and patterns."
+    role: "Context and Memory Keeper",
+    purpose: "Memory and context keeper that tracks long-term league behavior and patterns.",
+    promptPath: "./agent-personas/the-elephant.md"
   }
 ];
+const personaCache = new Map();
+const simulationState = {
+  running: new Set(),
+};
 
 initialize();
 
@@ -40,6 +58,7 @@ function initialize() {
   hydrateHeader("agents");
   bindConnectButton();
   setupAgentConfigPanel();
+  setupAgentSimulationPanel();
   setupAgentControls();
 }
 
@@ -124,6 +143,183 @@ function escapeHtml(value) {
 
 function escapeAttribute(value) {
   return escapeHtml(value).replaceAll('"', "&quot;");
+}
+
+function setupAgentSimulationPanel() {
+  const grid = document.getElementById("scenario-grid");
+  const runAllBtn = document.getElementById("run-all-agents");
+  const scenarioInput = document.getElementById("scenario-input");
+  const status = document.getElementById("agents-status");
+  if (!grid || !runAllBtn || !(scenarioInput instanceof HTMLTextAreaElement)) {
+    return;
+  }
+
+  grid.innerHTML = AGENT_DEFINITIONS.map((agent) => `
+    <article class="scenario-card" data-agent-id="${agent.id}">
+      <h3>${escapeHtml(agent.name)}</h3>
+      <p class="scenario-role">${escapeHtml(agent.role)}</p>
+      <p class="scenario-insight">${escapeHtml(agent.purpose)}</p>
+      <div class="scenario-toolbar">
+        <button class="scenario-btn" type="button" data-action="run-agent">Run ${escapeHtml(agent.name)}</button>
+      </div>
+      <pre class="scenario-output" data-output>Ready. Add API key in the panel above and run this agent.</pre>
+    </article>
+  `).join("");
+
+  grid.addEventListener("click", async (event) => {
+    if (!(event.target instanceof Element)) {
+      return;
+    }
+    const button = event.target.closest("button[data-action='run-agent']");
+    if (!(button instanceof HTMLButtonElement)) {
+      return;
+    }
+    const card = button.closest(".scenario-card");
+    const agentId = Number(card?.getAttribute("data-agent-id"));
+    if (!agentId) {
+      return;
+    }
+    await runAgentSimulation(agentId, scenarioInput.value.trim());
+  });
+
+  runAllBtn.addEventListener("click", async () => {
+    const scenario = scenarioInput.value.trim();
+    runAllBtn.disabled = true;
+    if (status) {
+      status.textContent = "Running all six agents for the current scenario...";
+    }
+    try {
+      await Promise.all(AGENT_DEFINITIONS.map((agent) => runAgentSimulation(agent.id, scenario)));
+      if (status) {
+        status.textContent = "All six agent recommendations are updated.";
+      }
+    } finally {
+      runAllBtn.disabled = false;
+    }
+  });
+}
+
+async function runAgentSimulation(agentId, scenarioText) {
+  const agent = AGENT_DEFINITIONS.find((item) => item.id === agentId);
+  if (!agent) {
+    return;
+  }
+
+  const card = document.querySelector(`.scenario-card[data-agent-id="${agentId}"]`);
+  const output = card?.querySelector("[data-output]");
+  const button = card?.querySelector("button[data-action='run-agent']");
+  if (!(output instanceof HTMLElement) || !(button instanceof HTMLButtonElement)) {
+    return;
+  }
+
+  const config = loadAgentConfig();
+  const agentConfig = config[String(agentId)] || {};
+  const apiKey = typeof agentConfig.apiKey === "string" ? agentConfig.apiKey.trim() : "";
+  const model = typeof agentConfig.model === "string" && agentConfig.model.trim() ? agentConfig.model.trim() : DEFAULT_MODEL;
+  const baseUrl = typeof agentConfig.baseUrl === "string" && agentConfig.baseUrl.trim()
+    ? agentConfig.baseUrl.trim()
+    : DEFAULT_BASE_URL;
+
+  if (!apiKey) {
+    output.textContent = "No API key saved for this agent. Enter one above, then rerun.";
+    return;
+  }
+
+  if (!scenarioText) {
+    output.textContent = "Scenario is empty. Add a scenario prompt and rerun.";
+    return;
+  }
+
+  if (simulationState.running.has(agentId)) {
+    return;
+  }
+
+  simulationState.running.add(agentId);
+  button.disabled = true;
+  output.textContent = `Running ${agent.name}...`;
+
+  try {
+    const persona = await loadPersonaPrompt(agent);
+    const responseText = await requestAgentRecommendation({
+      apiKey,
+      model,
+      baseUrl,
+      persona,
+      scenarioText,
+      agent,
+    });
+    output.textContent = responseText || "No output returned.";
+  } catch (error) {
+    output.textContent = `Request failed: ${error instanceof Error ? error.message : String(error)}`;
+  } finally {
+    simulationState.running.delete(agentId);
+    button.disabled = false;
+  }
+}
+
+async function loadPersonaPrompt(agent) {
+  if (personaCache.has(agent.promptPath)) {
+    return personaCache.get(agent.promptPath);
+  }
+  const response = await fetch(agent.promptPath, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`Could not load persona file (${agent.promptPath})`);
+  }
+  const text = (await response.text()).trim();
+  if (!text) {
+    throw new Error(`Persona file is empty (${agent.promptPath})`);
+  }
+  personaCache.set(agent.promptPath, text);
+  return text;
+}
+
+async function requestAgentRecommendation({ apiKey, model, baseUrl, persona, scenarioText, agent }) {
+  const userPrompt = [
+    "Scenario:",
+    scenarioText,
+    "",
+    "Return format:",
+    "1) Recommendation",
+    "2) Immediate next actions",
+    "3) Key risk to monitor in next 24 hours",
+  ].join("\n");
+
+  const response = await fetch(baseUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0.3,
+      messages: [
+        { role: "system", content: persona },
+        { role: "user", content: userPrompt },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const details = await safeReadResponseText(response);
+    throw new Error(`${agent.name} API error ${response.status}${details ? `: ${details}` : ""}`);
+  }
+
+  const payload = await response.json();
+  const content = payload?.choices?.[0]?.message?.content;
+  if (typeof content === "string" && content.trim()) {
+    return content.trim();
+  }
+  throw new Error("No message content in model response.");
+}
+
+async function safeReadResponseText(response) {
+  try {
+    const text = await response.text();
+    return String(text || "").trim().slice(0, 240);
+  } catch (_error) {
+    return "";
+  }
 }
 
 function setupAgentControls() {
@@ -348,22 +544,6 @@ function findPersonalityPanel(frameDoc) {
     }
   }
   return null;
-}
-
-function pinPersonalityPanel(frameDoc) {
-  const panel = findPersonalityPanel(frameDoc);
-  if (!panel) {
-    return;
-  }
-
-  panel.style.top = "auto";
-  panel.style.right = "12px";
-  panel.style.left = "12px";
-  panel.style.bottom = "12px";
-  panel.style.width = "auto";
-  panel.style.maxHeight = "34%";
-  panel.style.overflow = "auto";
-  panel.style.zIndex = "130";
 }
 
 function hidePersonalityPanel(frameDoc) {

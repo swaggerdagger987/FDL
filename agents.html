@@ -402,6 +402,74 @@
       line-height: 1.45;
     }
 
+    .scenario-input-wrap {
+      margin-top: 12px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .scenario-label {
+      font-family: "Manrope", sans-serif;
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(214, 226, 244, 0.85);
+    }
+
+    .scenario-input {
+      width: 100%;
+      box-sizing: border-box;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(5, 8, 14, 0.84);
+      color: #f6f9ff;
+      font-family: "Manrope", sans-serif;
+      font-size: 0.9rem;
+      line-height: 1.45;
+      padding: 10px 12px;
+      min-height: 92px;
+      resize: vertical;
+    }
+
+    .scenario-toolbar {
+      margin-top: 10px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .scenario-btn {
+      border: 1px solid rgba(94, 231, 255, 0.5);
+      border-radius: 8px;
+      background: rgba(15, 50, 72, 0.9);
+      color: #ecf9ff;
+      font-family: "Manrope", sans-serif;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      padding: 8px 10px;
+      cursor: pointer;
+    }
+
+    .scenario-btn:disabled {
+      opacity: 0.55;
+      cursor: default;
+    }
+
+    .scenario-output {
+      margin: 0;
+      font-family: "Manrope", sans-serif;
+      font-size: 0.84rem;
+      line-height: 1.45;
+      color: rgba(226, 236, 250, 0.92);
+      white-space: pre-wrap;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      background: rgba(4, 8, 14, 0.8);
+      padding: 10px;
+      min-height: 130px;
+    }
+
     @media (max-width: 900px) {
       .agents-frame-wrap {
         min-height: 72vh;
@@ -478,40 +546,17 @@
       <section class="agents-scenario" aria-labelledby="agents-scenario-title">
         <h2 id="agents-scenario-title">Thursday Shock Scenario: Bijan Robinson Injury Tweet</h2>
         <p class="scenario-kicker">
-          Trigger event: a Thursday afternoon report says Bijan Robinson is expected to miss time. Every agent responds with a role-specific recommendation and immediate action.
+          Trigger event: a Thursday afternoon report says Bijan Robinson is expected to miss time.
+          Run each LLM agent below to get role-specific actions and insight.
         </p>
-        <div class="scenario-grid">
-          <article class="scenario-card">
-            <h3>Hootsworth</h3>
-            <p class="scenario-role">Strategic Coordinator</p>
-            <p class="scenario-insight">Recommendation: shift to a floor-first weekly plan and lock in guaranteed volume at RB. Next action: set lineup priority order and mark all high-variance flex plays as conditional until final practice reports.</p>
-          </article>
-          <article class="scenario-card">
-            <h3>Dr. Dolphin</h3>
-            <p class="scenario-role">Data Specialist</p>
-            <p class="scenario-insight">Recommendation: project the Arizona backfield split and identify the highest expected touch replacement options. Next action: re-run weekly projections with injury-adjusted usage assumptions and publish updated PPR deltas.</p>
-          </article>
-          <article class="scenario-card">
-            <h3>Hawkeye</h3>
-            <p class="scenario-role">Waiver and Opponent Scanner</p>
-            <p class="scenario-insight">Recommendation: immediately claim the direct backup and block league rivals with secondary contingency adds. Next action: execute waiver queue order, then scan opponent benches for likely counter-moves.</p>
-          </article>
-          <article class="scenario-card">
-            <h3>The Fox</h3>
-            <p class="scenario-role">Trade Negotiator</p>
-            <p class="scenario-insight">Recommendation: send two fast trade packages before market pricing fully adjusts. Next action: target managers with RB surplus and open with 2-for-1 offers that preserve your elite WR core.</p>
-          </article>
-          <article class="scenario-card">
-            <h3>The Octopus</h3>
-            <p class="scenario-role">Scenario Planner</p>
-            <p class="scenario-insight">Recommendation: build three branches: short absence, multi-week IR window, and false-alarm news reversal. Next action: attach lineup, waiver, and FAAB plans to each branch so pivots are instant once official status confirms.</p>
-          </article>
-          <article class="scenario-card">
-            <h3>The Elephant</h3>
-            <p class="scenario-role">Context and Memory Keeper</p>
-            <p class="scenario-insight">Recommendation: use league history to exploit manager tendencies during panic cycles. Next action: surface prior injury-week behaviors, identify overreactive managers, and suggest best timing for buy-low or sell-high counters.</p>
-          </article>
+        <div class="scenario-input-wrap">
+          <label class="scenario-label" for="scenario-input">Scenario Prompt</label>
+          <textarea id="scenario-input" class="scenario-input">A verified Thursday tweet reports Bijan Robinson suffered a midweek injury and may miss Sunday. I need immediate moves for a competitive PPR redraft roster with limited bench depth.</textarea>
+          <div class="scenario-toolbar">
+            <button id="run-all-agents" class="scenario-btn" type="button">Run All 6 Agents</button>
+          </div>
         </div>
+        <div class="scenario-grid" id="scenario-grid"></div>
       </section>
     </section>
   </main>
