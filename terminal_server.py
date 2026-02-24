@@ -7,6 +7,8 @@ from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
+from urllib.request import Request, urlopen
+import urllib.error
 
 import live_data
 
@@ -292,6 +294,70 @@ class TerminalRequestHandler(SimpleHTTPRequestHandler):
                 if parsed.path == "/api/screener/query" and method == "POST":
                     result = live_data.fetch_screener_query(connection, body)
                     self.send_json(200, result)
+                    return
+
+                if parsed.path == "/api/agents/recommend" and method == "POST":
+                    api_key = str(body.get("api_key", "")).strip()
+                    model = str(body.get("model", "")).strip()
+                    persona = str(body.get("persona", "")).strip()
+                    scenario = str(body.get("scenario", "")).strip()
+                    base_url = str(body.get("base_url", "")).strip() or "https://openrouter.ai/api/v1/chat/completions"
+
+                    if not api_key:
+                        self.send_json(400, {"error": "api_key is required"})
+                        return
+                    if not model:
+                        self.send_json(400, {"error": "model is required"})
+                        return
+                    if not scenario:
+                        self.send_json(400, {"error": "scenario is required"})
+                        return
+
+                    payload = {
+                        "model": model,
+                        "temperature": 0.3,
+                        "messages": [
+                            {"role": "system", "content": persona},
+                            {"role": "user", "content": scenario},
+                        ],
+                    }
+                    headers = {
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {api_key}",
+                    }
+                    if "openrouter.ai" in base_url:
+                        headers["HTTP-Referer"] = "http://localhost:8000"
+                        headers["X-Title"] = "Fourth Down Labs"
+
+                    request = Request(
+                        base_url,
+                        data=json.dumps(payload, ensure_ascii=True).encode("utf-8"),
+                        headers=headers,
+                        method="POST",
+                    )
+                    try:
+                        with urlopen(request, timeout=60) as response:
+                            raw = response.read().decode("utf-8")
+                    except urllib.error.HTTPError as error:
+                        details = error.read().decode("utf-8", errors="ignore")
+                        self.send_json(error.code, {"error": "provider_error", "details": details[:800]})
+                        return
+                    except Exception as error:  # noqa: BLE001
+                        self.send_json(502, {"error": "provider_network_error", "details": str(error)})
+                        return
+
+                    try:
+                        provider_payload = json.loads(raw)
+                    except json.JSONDecodeError:
+                        self.send_json(502, {"error": "provider_invalid_json", "details": raw[:800]})
+                        return
+
+                    content = (
+                        provider_payload.get("choices", [{}])[0]
+                        .get("message", {})
+                        .get("content", "")
+                    )
+                    self.send_json(200, {"text": content, "raw": provider_payload})
                     return
 
                 if parsed.path == "/api/screener" and method == "GET":

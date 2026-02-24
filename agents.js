@@ -368,25 +368,16 @@ async function requestAgentRecommendation({ apiKey, model, baseUrl, persona, sce
     "3) Key risk to monitor in next 24 hours",
   ].join("\n");
 
-  const headers = {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${apiKey}`,
-  };
-  if (baseUrl.includes("openrouter.ai")) {
-    headers["HTTP-Referer"] = window.location.origin;
-    headers["X-Title"] = "Fourth Down Labs";
-  }
-
-  const response = await fetch(baseUrl, {
+  const response = await fetch("/api/agents/recommend", {
     method: "POST",
-    headers,
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      api_key: apiKey,
       model,
+      base_url: baseUrl,
+      persona,
+      scenario: userPrompt,
       temperature: 0.3,
-      messages: [
-        { role: "system", content: persona },
-        { role: "user", content: userPrompt },
-      ],
     }),
   });
 
@@ -394,9 +385,8 @@ async function requestAgentRecommendation({ apiKey, model, baseUrl, persona, sce
     const details = await safeReadResponseText(response);
     throw new Error(`${agent.name} API error ${response.status}${details ? `: ${details}` : ""}`);
   }
-
   const payload = await response.json();
-  const content = payload?.choices?.[0]?.message?.content;
+  const content = payload?.text;
   if (typeof content === "string" && content.trim()) {
     return content.trim();
   }
