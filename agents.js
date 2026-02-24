@@ -7,43 +7,43 @@ const AGENT_DEFINITIONS = [
   {
     id: 1,
     name: "Hootsworth",
-    role: "Strategic Coordinator",
-    purpose: "Strategic coordinator that sets lineup priorities and balances weekly risk.",
+    role: "Chief of Staff",
+    purpose: "Orchestration, triage, briefing compilation, and final front-office recommendations.",
     promptPath: "./agent-personas/hootsworth.md"
   },
   {
     id: 2,
     name: "Dr. Dolphin",
-    role: "Data Specialist",
-    purpose: "Data specialist focused on projections, trend shifts, and matchup volatility.",
+    role: "Medical Analyst",
+    purpose: "Injury intelligence, recovery timelines, and return-to-play projections.",
     promptPath: "./agent-personas/dr-dolphin.md"
   },
   {
     id: 3,
     name: "Hawkeye",
-    role: "Waiver and Opponent Scanner",
-    purpose: "Waiver and opponent scanner that spots immediate tactical opportunities.",
+    role: "Scout",
+    purpose: "Player evaluation, usage trends, breakout signals, and waiver opportunity ranking.",
     promptPath: "./agent-personas/hawkeye.md"
   },
   {
     id: 4,
     name: "The Fox",
-    role: "Trade Negotiator",
-    purpose: "Trade negotiator that identifies leverage, pricing edges, and deal timing.",
+    role: "Diplomat (Adversarial Intelligence)",
+    purpose: "Leaguemate profiling, trade leverage, FAAB modeling, and negotiation intelligence.",
     promptPath: "./agent-personas/the-fox.md"
   },
   {
     id: 5,
     name: "The Octopus",
-    role: "Scenario Planner",
-    purpose: "Scenario planner that runs multi-step contingency paths across roster outcomes.",
+    role: "Quant (Valuations and Modeling)",
+    purpose: "Dynasty valuations, pick values, championship odds, and optimal-path modeling.",
     promptPath: "./agent-personas/the-octopus.md"
   },
   {
     id: 6,
     name: "The Elephant",
-    role: "Context and Memory Keeper",
-    purpose: "Memory and context keeper that tracks long-term league behavior and patterns.",
+    role: "Historian (League Memory)",
+    purpose: "Precedent analysis, league memory, and long-horizon pattern recognition."
     promptPath: "./agent-personas/the-elephant.md"
   }
 ];
