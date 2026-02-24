@@ -337,6 +337,14 @@
       background: rgba(27, 74, 103, 0.95);
     }
 
+    .agent-global-row {
+      margin-top: 12px;
+      display: grid;
+      gap: 8px;
+      grid-template-columns: minmax(220px, 1fr) auto;
+      align-items: end;
+    }
+
     .agents-scenario {
       margin-top: 18px;
       border-radius: 16px;
@@ -540,6 +548,13 @@
         <p class="agents-config-subtitle">
           Each card explains the agent role. Update API keys here and apply directly to the live map.
         </p>
+        <div class="agent-global-row">
+          <div>
+            <label class="agent-key-label" for="all-agent-key">One Key For All Agents</label>
+            <input id="all-agent-key" class="agent-key-input" type="password" autocomplete="off" placeholder="sk-or-v1-..." />
+          </div>
+          <button id="save-all-agent-keys" class="agent-save-btn" type="button">Apply To All 6</button>
+        </div>
         <div id="agent-cards" class="agent-cards"></div>
       </section>
 

@@ -1,8 +1,8 @@
 import { bindConnectButton, hydrateHeader } from "./site_state.js";
 
 const AGENT_CONFIG_STORAGE_KEY = "fdl.agentConfigs.v1";
-const DEFAULT_MODEL = "gpt-4o-mini";
-const DEFAULT_BASE_URL = "https://api.openai.com/v1/chat/completions";
+const DEFAULT_MODEL = "openai/gpt-4o-mini";
+const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1/chat/completions";
 const AGENT_DEFINITIONS = [
   {
     id: 1,
@@ -66,6 +66,8 @@ function setupAgentConfigPanel() {
   const cardsHost = document.getElementById("agent-cards");
   const status = document.getElementById("agents-status");
   const iframe = document.getElementById("agents-iframe");
+  const allKeyInput = document.getElementById("all-agent-key");
+  const saveAllButton = document.getElementById("save-all-agent-keys");
   if (!cardsHost) {
     return;
   }
@@ -104,12 +106,47 @@ function setupAgentConfigPanel() {
       const existing = current[String(id)] || {};
       current[String(id)] = {
         apiKey: input.value.trim(),
-        model: typeof existing.model === "string" ? existing.model : "",
-        baseUrl: typeof existing.baseUrl === "string" ? existing.baseUrl : ""
+        model: typeof existing.model === "string" && existing.model.trim() ? existing.model : DEFAULT_MODEL,
+        baseUrl: typeof existing.baseUrl === "string" && existing.baseUrl.trim() ? existing.baseUrl : DEFAULT_BASE_URL
       };
       localStorage.setItem(AGENT_CONFIG_STORAGE_KEY, JSON.stringify(current));
       if (status) {
         status.textContent = `Saved API key for ${AGENT_DEFINITIONS[id - 1]?.name || `Agent ${id}`}. Reloading tactical map to apply.`;
+      }
+      if (iframe instanceof HTMLIFrameElement && iframe.contentWindow) {
+        iframe.contentWindow.location.reload();
+      }
+    });
+  }
+
+  if (allKeyInput instanceof HTMLInputElement && saveAllButton instanceof HTMLButtonElement) {
+    saveAllButton.addEventListener("click", () => {
+      const sharedKey = allKeyInput.value.trim();
+      if (!sharedKey) {
+        if (status) {
+          status.textContent = "Enter an API key first, then click Apply To All 6.";
+        }
+        return;
+      }
+      const current = loadAgentConfig();
+      for (const agent of AGENT_DEFINITIONS) {
+        const existing = current[String(agent.id)] || {};
+        current[String(agent.id)] = {
+          apiKey: sharedKey,
+          model: typeof existing.model === "string" && existing.model.trim() ? existing.model : DEFAULT_MODEL,
+          baseUrl: typeof existing.baseUrl === "string" && existing.baseUrl.trim() ? existing.baseUrl : DEFAULT_BASE_URL
+        };
+      }
+      localStorage.setItem(AGENT_CONFIG_STORAGE_KEY, JSON.stringify(current));
+      allKeyInput.value = "";
+      for (const card of cardsHost.querySelectorAll(".agent-card")) {
+        const input = card.querySelector(".agent-key-input");
+        if (input instanceof HTMLInputElement) {
+          input.value = sharedKey;
+        }
+      }
+      if (status) {
+        status.textContent = "Applied API key to all six agents (stored locally in this browser).";
       }
       if (iframe instanceof HTMLIFrameElement && iframe.contentWindow) {
         iframe.contentWindow.location.reload();
@@ -284,12 +321,18 @@ async function requestAgentRecommendation({ apiKey, model, baseUrl, persona, sce
     "3) Key risk to monitor in next 24 hours",
   ].join("\n");
 
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${apiKey}`,
+  };
+  if (baseUrl.includes("openrouter.ai")) {
+    headers["HTTP-Referer"] = window.location.origin;
+    headers["X-Title"] = "Fourth Down Labs";
+  }
+
   const response = await fetch(baseUrl, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
+    headers,
     body: JSON.stringify({
       model,
       temperature: 0.3,
