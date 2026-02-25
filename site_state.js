@@ -1,6 +1,8 @@
 const SLEEPER_API_BASE = "https://api.sleeper.app/v1";
 const SLEEPER_AVATAR_BASE = "https://sleepercdn.com/avatars/thumbs";
 const SESSION_STORAGE_KEY = "fdl_sleeper_session_v1";
+const LAB_CONTEXT_STORAGE_KEY = "fdl_shared_lab_context_v1";
+const INTEL_CONTEXT_STORAGE_KEY = "fdl_shared_intel_context_v1";
 
 export function currentSleeperSeason(now = new Date()) {
   const year = now.getFullYear();
@@ -28,6 +30,22 @@ export function clearSleeperSession() {
   window.localStorage.removeItem(SESSION_STORAGE_KEY);
 }
 
+export function setLabContext(context) {
+  setSharedContext(LAB_CONTEXT_STORAGE_KEY, context);
+}
+
+export function getLabContext() {
+  return getSharedContext(LAB_CONTEXT_STORAGE_KEY);
+}
+
+export function setLeagueIntelContext(context) {
+  setSharedContext(INTEL_CONTEXT_STORAGE_KEY, context);
+}
+
+export function getLeagueIntelContext() {
+  return getSharedContext(INTEL_CONTEXT_STORAGE_KEY);
+}
+
 export async function fetchSleeperJSON(path) {
   const response = await fetch(`${SLEEPER_API_BASE}${path}`);
   if (!response.ok) {
@@ -35,6 +53,31 @@ export async function fetchSleeperJSON(path) {
     throw new Error(`Sleeper API error ${response.status}.`);
   }
   return response.json();
+}
+
+function setSharedContext(storageKey, context) {
+  if (!context || typeof context !== "object") return;
+  const normalized = {
+    ...context,
+    updated_at: new Date().toISOString()
+  };
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(normalized));
+  } catch (_error) {
+    // Ignore storage write failures.
+  }
+}
+
+function getSharedContext(storageKey) {
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed;
+  } catch (_error) {
+    return null;
+  }
 }
 
 export async function connectSleeperByUsername(usernameInput, seasonInput) {

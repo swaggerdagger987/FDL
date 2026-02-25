@@ -1,4 +1,4 @@
-import { bindConnectButton, getSleeperSession, hydrateHeader, updateSelectedLeague } from "./site_state.js";
+import { bindConnectButton, getSleeperSession, hydrateHeader, setLabContext, updateSelectedLeague } from "./site_state.js";
 import { escapeHtml, sleep } from "./utils.js";
 
 const FALLBACK_METRIC_KEYS = [
@@ -931,6 +931,7 @@ async function runScreen() {
     dom.count.textContent = `${sortedItems.length} players`;
     updateSortLabel();
     persistLastView();
+    publishLabContext(sortedItems, filters);
 
     setStatus(
       `Screen complete. ${sortedItems.length} players · ${filters.length} metric filter${
@@ -943,6 +944,31 @@ async function runScreen() {
   } finally {
     dom.runBtn.disabled = false;
   }
+}
+
+function publishLabContext(sortedItems, filters) {
+  const session = getSleeperSession();
+  const quickFilterCount = Object.values(state.quickMetricRanges || {}).filter(
+    (range) => String(range?.min || "").trim() || String(range?.max || "").trim()
+  ).length;
+
+  setLabContext({
+    league_id: String(session?.selected_league_id || ""),
+    item_count: Number(sortedItems?.length || 0),
+    filter_count: Number(filters?.length || 0),
+    sort_key: String(state.sortKey || ""),
+    sort_direction: String(state.sortDirection || "desc"),
+    selected_positions: [...state.selectedPositions],
+    active_columns: [...state.activeColumns].slice(0, 12),
+    quick_filter_count: quickFilterCount,
+    top_players: (sortedItems || []).slice(0, 6).map((item) => ({
+      player_name: String(item?.full_name || "-"),
+      position: String(item?.position || "-"),
+      team: String(item?.team || "-"),
+      fantasy_points_ppr: Number(item?.latest_fantasy_points_ppr || 0)
+    })),
+    view: getCurrentViewConfig()
+  });
 }
 
 async function postScreenerQuery(request) {

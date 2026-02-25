@@ -6,6 +6,7 @@ import {
   getSleeperSession,
   hydrateHeader,
   renderConnectButton,
+  setLeagueIntelContext,
   setSleeperSession,
   updateSelectedLeague
 } from "./site_state.js";
@@ -183,6 +184,7 @@ async function loadIntel() {
     const query = readQueryState();
     state.detailManagerId = query.manager || "";
     renderDetail();
+    publishIntelContext();
 
     setStatus(
       `Computed intel for ${state.report.managers.length} managers across ${state.report.summary.seasonsAnalyzed} season(s).`,
@@ -351,12 +353,14 @@ function onManagerGridClick(event) {
 function renderDetail() {
   if (!state.report || !state.detailManagerId) {
     dom.detailSection.classList.add("hidden");
+    publishIntelContext();
     return;
   }
 
   const manager = state.report.managers.find((item) => item.userId === state.detailManagerId);
   if (!manager) {
     dom.detailSection.classList.add("hidden");
+    publishIntelContext();
     return;
   }
 
@@ -373,6 +377,42 @@ function renderDetail() {
   renderRosterComposition(manager);
   renderFaabSection(manager);
   renderTradeSection(manager);
+  publishIntelContext();
+}
+
+function publishIntelContext() {
+  const summary = state.report?.summary || null;
+  const selectedManager = state.report?.managers?.find((item) => item.userId === state.detailManagerId) || null;
+  const managers = Array.isArray(state.report?.managers) ? state.report.managers : [];
+  const topAggression = [...managers]
+    .filter((manager) => !manager.isYou)
+    .sort((a, b) => Number(b.aggressionScore || 0) - Number(a.aggressionScore || 0))
+    .slice(0, 3)
+    .map((manager) => ({
+      display_name: manager.displayName,
+      aggression_score: Number(manager.aggressionScore || 0),
+      weak_positions: Array.isArray(manager.weakPositions) ? manager.weakPositions : []
+    }));
+
+  setLeagueIntelContext({
+    league_id: state.selectedLeagueId,
+    league_name: activeLeagueName(),
+    lookback: Number(state.lookback || 2),
+    managers_analyzed: Number(summary?.managersAnalyzed || managers.length || 0),
+    seasons_analyzed: Number(summary?.seasonsAnalyzed || 0),
+    total_transactions: Number(summary?.totalTransactions || 0),
+    selected_manager: selectedManager
+      ? {
+          user_id: selectedManager.userId,
+          display_name: selectedManager.displayName,
+          profile_label: selectedManager.profileLabel,
+          weak_positions: Array.isArray(selectedManager.weakPositions) ? selectedManager.weakPositions : [],
+          targeting_cue: selectedManager.targetingCue || "",
+          trade_pattern: selectedManager.tradePattern || null
+        }
+      : null,
+    top_aggressive_managers: topAggression
+  });
 }
 
 function renderScoreCard(label, value, pct) {
