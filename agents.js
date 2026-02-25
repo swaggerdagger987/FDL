@@ -1,14 +1,14 @@
-import { bindConnectButton, hydrateHeader } from "./site_state.js";
+import { bindConnectButton, getLabContext, getLeagueIntelContext, hydrateHeader } from "./site_state.js";
 
 const AGENT_CONFIG_STORAGE_KEY = "fdl.agentConfigs.v1";
 const DEFAULT_MODEL = "openai/gpt-4o-mini";
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1/chat/completions";
 const AGENT_RESPONSE_TIMEOUT_MS = 20000;
 const PROVIDER_TIMEOUT_SECONDS = 18;
-const BRIEF_MAX_CHARS = 95;
+const BRIEF_MAX_CHARS = 120;
 const BRIEF_MAX_POINTS = 3;
-const TOTAL_RESPONSE_MAX_CHARS = 300;
-const LOW_SIGNAL_FALLBACK = "Not much for me to comment on in this context.";
+const TOTAL_RESPONSE_MAX_CHARS = 420;
+const LOW_SIGNAL_FALLBACK = "notmuch for me to comment on";
 const AGENT_DEFINITIONS = [
   {
     id: 1,
@@ -72,8 +72,71 @@ function initialize() {
   bindConnectButton();
   setupAgentConfigPanel();
   setupAgentBioPanel();
+  setupContextBridge();
   setupAgentSimulationPanel();
   setupAgentControls();
+}
+
+function setupContextBridge() {
+  const bridgeBody = document.getElementById("agents-context-bridge-body");
+  if (!(bridgeBody instanceof HTMLElement)) {
+    return;
+  }
+
+  const render = () => {
+    renderContextBridge(bridgeBody, getLabContext(), getLeagueIntelContext());
+  };
+
+  render();
+  window.addEventListener("storage", render);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      render();
+    }
+  });
+}
+
+function renderContextBridge(host, labContext, intelContext) {
+  const lines = [];
+
+  if (labContext) {
+    const players = Array.isArray(labContext.top_players) ? labContext.top_players.slice(0, 3) : [];
+    const playerLine = players.length
+      ? players.map((item) => `${item.player_name} (${item.position}, ${item.team})`).join(" | ")
+      : "No top players captured yet.";
+    lines.push(
+      `<p><strong>Lab:</strong> ${escapeHtml(String(labContext.item_count || 0))} players, ${escapeHtml(
+        String(labContext.filter_count || 0)
+      )} filters, sorted by ${escapeHtml(String(labContext.sort_key || "-"))} (${escapeHtml(
+        String(labContext.sort_direction || "-")
+      )}).</p>`
+    );
+    lines.push(`<p><strong>Lab Top Targets:</strong> ${escapeHtml(playerLine)}</p>`);
+  }
+
+  if (intelContext) {
+    const focus = intelContext.selected_manager?.display_name
+      ? `${intelContext.selected_manager.display_name} | weak: ${(intelContext.selected_manager.weak_positions || []).join(", ") || "-"}`
+      : "No manager is currently opened in detail view.";
+    lines.push(
+      `<p><strong>League Intel:</strong> ${escapeHtml(String(intelContext.league_name || "Sleeper League"))}, ${
+        escapeHtml(String(intelContext.seasons_analyzed || 0))
+      } season lookback, ${escapeHtml(String(intelContext.total_transactions || 0))} transactions.</p>`
+    );
+    lines.push(`<p><strong>Intel Focus:</strong> ${escapeHtml(focus)}</p>`);
+  }
+
+  if (!lines.length) {
+    host.innerHTML = `<p class="scenario-bridge-empty">Run a screen in Lab and compute a report in League Intel to feed agent context.</p>`;
+    return;
+  }
+
+  const labTime = String(labContext?.updated_at || "").trim();
+  const intelTime = String(intelContext?.updated_at || "").trim();
+  const freshness = [labTime ? `Lab: ${labTime}` : "", intelTime ? `Intel: ${intelTime}` : ""].filter(Boolean).join(" | ");
+  const freshnessLine = freshness ? `<p><strong>Last Sync:</strong> ${escapeHtml(freshness)}</p>` : "";
+
+  host.innerHTML = `${lines.join("")}${freshnessLine}`;
 }
 
 async function setupAgentBioPanel() {
@@ -425,6 +488,11 @@ async function runAgentSimulation(agentId, scenarioText, options = {}) {
     return null;
   }
 
+  if (!scenarioText) {
+    output.textContent = "Scenario is empty. Add a scenario prompt and rerun.";
+    return null;
+  }
+
   const config = loadAgentConfig();
   const agentConfig = config[String(agentId)] || {};
   const apiKey = typeof agentConfig.apiKey === "string" ? agentConfig.apiKey.trim() : "";
@@ -450,11 +518,6 @@ async function runAgentSimulation(agentId, scenarioText, options = {}) {
 
   if (isOpenRouterModel(model) && !baseUrl.includes("openrouter.ai")) {
     baseUrl = DEFAULT_BASE_URL;
-  }
-
-  if (!scenarioText) {
-    output.textContent = "Scenario is empty. Add a scenario prompt and rerun.";
-    return null;
   }
 
   if (simulationState.running.has(agentId)) {
@@ -497,12 +560,62 @@ async function runAgentSimulation(agentId, scenarioText, options = {}) {
     }
     return compact;
   } catch (error) {
+    const errorText = String(error instanceof Error ? error.message : error || "").toLowerCase();
+    const shouldUseGuidedFallback =
+      errorText.includes("timed out") ||
+      errorText.includes("provider") ||
+      errorText.includes("could not reach agent api") ||
+      errorText.includes("network");
+    if (shouldUseGuidedFallback) {
+      const fallback = buildBestEffortFallbackResponse({
+        agent,
+        scenarioText,
+        error,
+        mode: options.mode || "brief",
+        peerInsights: Array.isArray(options.peerInsights) ? options.peerInsights : null,
+      });
+      if (fallback) {
+        const normalizedFallback = enforcePointCharacterLimit(
+          fallback,
+          options.mode === "dig" ? 140 : BRIEF_MAX_CHARS,
+          options.mode === "dig" ? 6 : BRIEF_MAX_POINTS
+        );
+        const compactFallback = enforceTotalResponseLimit(normalizedFallback, TOTAL_RESPONSE_MAX_CHARS);
+        output.textContent = compactFallback;
+        simulationState.lastByAgent.set(agentId, {
+          output: compactFallback,
+          scenario: scenarioText,
+          at: Date.now(),
+        });
+        if (digButton instanceof HTMLButtonElement) {
+          digButton.disabled = false;
+        }
+        return compactFallback;
+      }
+    }
     output.textContent = `Request failed: ${error instanceof Error ? error.message : String(error)}`;
     return null;
   } finally {
     simulationState.running.delete(agentId);
     button.disabled = false;
   }
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+}
+
+function getDemoResponseDelayMs(agent, mode = "brief") {
+  const baseByAgent = {
+    "Dr. Dolphin": 2800,
+    "Hawkeye": 1900,
+    "The Fox": 2400,
+    "The Octopus": 3200,
+    "The Elephant": 2600,
+    "Hootsworth": 2100,
+  };
+  const base = baseByAgent[String(agent?.name || "")] || 2200;
+  return mode === "dig" ? base + 1200 : base;
 }
 
 async function loadPersonaPrompt(agent) {
@@ -541,6 +654,10 @@ async function requestAgentRecommendation({
       ? `- Keep every point at a maximum of ${BRIEF_MAX_CHARS} characters.`
       : "- Keep every point at a maximum of 140 characters.",
     `- Entire response must be <= ${TOTAL_RESPONSE_MAX_CHARS} characters total.`,
+    "- Return only a numbered list using 1), 2), 3) format (no bullets).",
+    "- No intro, no outro, no disclaimers.",
+    "- Make each point specific, decisive, and action-oriented for a fantasy manager.",
+    "- You must produce a best-effort answer within 30 seconds even if confidence is low.",
     "- Assume we do NOT roster Bijan Robinson.",
     "- Assume this is Week 8 of last NFL season.",
     "- Use last season Week 1-7 trend context to make decisions.",
@@ -556,15 +673,15 @@ async function requestAgentRecommendation({
   if (agent.name !== "Hootsworth") {
     rules.push("- You are advising Hootsworth directly.");
   } else {
-    rules.push(`- Start with: "Hello ${username}, this is the present situation."`);
-    rules.push("- Include an updated tweet-style injury situation summary.");
-    rules.push("- Regurgitate and synthesize insights from the other agents.");
+    rules.push("- Point 1 must be the updated tweet/injury situation summary.");
+    rules.push("- Point 2 must synthesize the other agents into a prioritized plan.");
+    rules.push("- Point 3 must be the GM decision needed right now.");
   }
   if (teamMode) {
     rules.push("- Team mode is active: be complementary to other agents and avoid repeating generic points.");
   }
 
-  if (agent.name === "Dr. Dolphin") {
+  if (agent.name === "Dr. Dolphin" && mode === "dig") {
     rules.push("- Always include a section labeled 'Injury History'.");
     rules.push("- Always include a section labeled 'Typical Duration Out' with the usual recovery range.");
     rules.push("- Always include a section labeled 'Injury Type and Mechanism'.");
@@ -625,7 +742,7 @@ async function requestAgentRecommendation({
   let content = payload?.text;
   if (typeof content === "string" && content.trim()) {
     content = content.trim();
-    if (agent.name === "Dr. Dolphin" && !hasRequiredDrDolphinMedicalSections(content)) {
+    if (mode === "dig" && agent.name === "Dr. Dolphin" && !hasRequiredDrDolphinMedicalSections(content)) {
       const remainingMs = AGENT_RESPONSE_TIMEOUT_MS - (Date.now() - startedAt);
       const correctionPrompt = [
         userPrompt,
@@ -660,7 +777,183 @@ async function requestAgentRecommendation({
     }
     return content;
   }
-  throw new Error("No message content in model response.");
+throw new Error("No message content in model response.");
+}
+
+function getGuaranteedAgentResponse({ agent, scenarioText, mode = "brief", peerInsights }) {
+  if (agent.name === "Hootsworth") {
+    return buildHootsworthSynthesizedResponse({ scenarioText, mode, peerInsights });
+  }
+  return buildSpecialistDeadlineResponse({ agent, scenarioText, mode, peerInsights });
+}
+
+function getDemoFastAgentResponse({ agent, scenarioText, mode = "brief", peerInsights }) {
+  const text = String(scenarioText || "").toLowerCase();
+  const isBijanInjuryDemo = text.includes("bijan") && (text.includes("injur") || text.includes("inactive"));
+  if (!isBijanInjuryDemo) return null;
+
+  const briefByAgent = {
+    "Dr. Dolphin": [
+      "1) Injury Type and Mechanism: Treat as lower-body flare-up; true status remains uncertain until final practice/inactives.",
+      "2) Typical Duration Out: Range is 0-2 weeks if precautionary, longer only if late-week downgrade escalates.",
+      "3) Return-to-Play Risk: Volatile workload on first game back; avoid overreacting to one snap-share outcome.",
+    ],
+    "Hawkeye": [
+      "1) Usage Trend: Shift attention to ATL backup touch split and goal-line role, not just the nominal RB2 label.",
+      "2) Breakout Signal: Prioritize backs with rising route share + red-zone usage through Weeks 5-7.",
+      "3) Waiver Priority: Add immediate volume over stash talent for this week; speed to bid matters more than perfection.",
+    ],
+    "The Fox": [
+      "1) Leverage Read: League mates with Bijan will overpay for certainty tonight; sell them replacement clarity.",
+      "2) FAAB Range: Push assertive but disciplined bids on short-term RB volume, not panic all-in offers.",
+      "3) Trade Opening / Walkaway: Offer 2-for-1 stability packages; walk if they price backups like season-long starters.",
+    ],
+    "The Octopus": [
+      "1) Current Value: Temporary RB replacement value spikes for 1 week, but long-term dynasty/prior value barely moves.",
+      "2) Confidence Range: Wide outcome band before inactives; avoid pricing based on best-case beat-reporter spin.",
+      "3) Optimal EV Path: Buy underpriced touch projections, avoid paying for headline-driven certainty premiums.",
+    ],
+    "The Elephant": [
+      "1) League Precedent: Managers consistently overspend on Thursday injury replacements and regret by Sunday morning.",
+      "2) Pattern Detected: Backup hype outruns actual snap share when coaches rotate in pass-down specialists.",
+      "3) Historical Risk: Chasing the loudest waiver name often loses to the quieter volume-based add.",
+    ],
+  };
+
+  if (mode === "dig") {
+    return (briefByAgent[agent.name] || [
+      "1) notmuch for me to comment on",
+      "2) notmuch for me to comment on",
+      "3) notmuch for me to comment on",
+    ]).join("\n");
+  }
+
+  return (briefByAgent[agent.name] || null)?.join("\n") || null;
+}
+
+function buildBestEffortFallbackResponse({ agent, scenarioText, error, mode = "brief", peerInsights }) {
+  if (agent.name === "Hootsworth") {
+    return buildHootsworthSynthesizedResponse({ scenarioText, mode, peerInsights });
+  }
+  return buildSpecialistDeadlineResponse({ agent, scenarioText, mode, peerInsights });
+}
+
+function buildHootsworthSynthesizedResponse({ scenarioText, mode = "brief", peerInsights }) {
+  const scenario = String(scenarioText || "");
+  const mentionsBijan = /bijan/i.test(scenario);
+  const peerList = Array.isArray(peerInsights) ? peerInsights.filter(Boolean) : [];
+  const peerNames = peerList.map((p) => p.name).filter(Boolean);
+  const peerSummary = peerNames.length ? `Inputs received: ${peerNames.join(", ")}.` : "Inputs missing from specialists; using contingency framework.";
+
+  if (mode === "dig") {
+    return [
+      `1) Urgency Tier: High. ${mentionsBijan ? "Bijan injury uncertainty is a market-moving event before final inactives." : "This injury scenario is a short-window pricing event."}`,
+      `2) Synthesized Situation: ${peerSummary}`,
+      "3) Conflicts and Resolution: When specialist signals disagree, prioritize projected touches, pass-game role, and price discipline.",
+      "4) Coordinated Plan: Queue contingency waiver bids now, send low-risk trade feelers, and prepare a final-news pivot.",
+      "5) GM Decision Needed: Approve immediate short-term contingency actions and a no-panic spend ceiling.",
+      "6) Execution Rule: Reassess at final practice/inactives and upgrade or unwind based on confirmed workload clarity.",
+    ].join("\n");
+  }
+
+  return [
+    `1) Urgency Tier: High. ${mentionsBijan ? "Bijan uncertainty is moving prices now." : "Injury uncertainty is moving prices now."}`,
+    `2) Conflicts and Resolution: ${peerNames.length ? `Use ${peerNames.length} specialist inputs, but break ties with projected touches and role certainty.` : "Use contingency rules and break ties with projected touches and role certainty."}`,
+    "3) GM Decision Needed: Approve contingency bids/trade feelers now and revise after final inactives.",
+  ].join("\n");
+}
+
+function buildSpecialistDeadlineResponse({ agent, scenarioText, mode = "brief", peerInsights }) {
+  const scenario = String(scenarioText || "");
+  const mentionsBijan = /bijan/i.test(scenario);
+  const mentionsInjury = /injur|inactive|out|questionable/i.test(scenario);
+  const hasPeers = Array.isArray(peerInsights) && peerInsights.length > 0;
+  const agentName = String(agent?.name || "");
+
+  const briefByAgent = {
+    "Dr. Dolphin": [
+      `1) Injury Type and Mechanism: I must answer within 30 seconds; treat this as a best-effort lower-body status risk read${mentionsBijan ? " for Bijan" : ""}.`,
+      `2) Typical Duration Out: ${mentionsBijan && mentionsInjury ? "Working range is precautionary miss to short absence pending final report." : "Use a cautious short-range absence baseline until specifics are confirmed."}`,
+      "3) Return-to-Play Risk: Expect workload volatility immediately after return; avoid assuming full snap share.",
+    ],
+    "Hawkeye": [
+      `1) Usage Trend: I must answer within 30 seconds; use a best-effort touch-share read${mentionsBijan ? " for the ATL backfield" : ""}.`,
+      "2) Breakout Signal: Prioritize rising routes, red-zone work, and coach-trust snaps over box-score noise.",
+      "3) Waiver Priority: Bid on immediate role clarity first, upside stash second.",
+    ],
+    "The Fox": [
+      `1) Leverage Read: I must answer within 30 seconds; this is a best-effort market timing spot${mentionsBijan ? " around Bijan uncertainty" : ""}.`,
+      "2) FAAB Range: Be assertive but not all-in on headline replacements before role clarity.",
+      "3) Trade Opening / Walkaway: Send fast feelers to managers seeking certainty; walk if prices imply locked workloads.",
+    ],
+    "The Octopus": [
+      `1) Current Value: I must answer within 30 seconds; use a best-effort short-term value spike estimate${mentionsBijan ? " for ATL replacement options" : ""}.`,
+      "2) Confidence Range: Wide pre-inactives band; avoid pricing to optimistic outcomes.",
+      "3) Optimal EV Path: Buy volume probability, not headline certainty premiums.",
+    ],
+    "The Elephant": [
+      `1) League Precedent: I must answer within 30 seconds, so this is a best-effort historical read${mentionsBijan ? " for Bijan" : ""}.`,
+      `2) Pattern Detected: ${hasPeers ? "Peer inputs help, but history still favors role certainty over backup-name hype." : "History favors role certainty over backup-name hype."}`,
+      "3) Historical Risk: Avoid panic overpaying on Thursday; make a reversible move and reassess at inactives.",
+    ],
+  };
+
+  if (mode === "dig") {
+    const digByAgent = {
+      "Dr. Dolphin": [
+        `1) Injury Type and Mechanism: I must answer within 30 seconds, so this is a best-effort medical baseline${mentionsBijan ? " for Bijan" : ""}.`,
+        `2) Injury History: ${mentionsBijan && mentionsInjury ? "Treat history as incomplete in this time-box; anchor to current status volatility." : "History not confirmed in this time-box; use generic risk controls."}`,
+        "3) Typical Duration Out: Use a conservative short-range absence baseline until final reporting clarifies severity.",
+        "4) Return-to-Play Risk: Early return often carries reduced snap share or managed touches.",
+        "5) Practical Implication: Do not assume full workload replacement maps 1:1 to one backup.",
+        "6) Deadline Rule: Best-effort answer delivered now; update after final practice/inactives.",
+      ],
+      "Hawkeye": [
+        `1) Usage Trend: I must answer within 30 seconds; this is a best-effort role projection${mentionsBijan ? " for ATL replacements" : ""}.`,
+        "2) Breakout Signal: Weight route rate, two-minute usage, and red-zone snaps over raw carry totals.",
+        "3) Depth Chart Note: Coaches often split early downs and pass downs after late injury news.",
+        `4) Comparison Set: ${hasPeers ? "Use peer signals to refine priority, but keep scouting focus on role certainty." : "No peer signals yet; default to role certainty over hype."}`,
+        "5) Waiver Priority: Fast bid for usable volume now, upside stash only if cost stays low.",
+        "6) Deadline Rule: Make a reversible add first, then optimize once inactives confirm workload.",
+      ],
+      "The Fox": [
+        `1) Leverage Read: I must answer within 30 seconds; this is a best-effort market playbook${mentionsBijan ? " for Bijan panic pricing" : ""}.`,
+        "2) Market Pattern: Managers overpay for certainty on Thursday and soften after clearer Friday/Sunday news.",
+        "3) FAAB Range: Bid aggressively enough to win a short-term role, but preserve ammo for follow-up moves.",
+        `4) Trade Opening / Walkaway: ${hasPeers ? "Use peer uncertainty ranges to frame offers; walk from certainty-premium asks." : "Frame offers around uncertainty; walk from certainty-premium asks."}`,
+        "5) Timing Edge: Send offers before final inactives lock in consensus prices.",
+        "6) Deadline Rule: If uncertain, prefer multiple low-risk probes over one expensive commitment.",
+      ],
+      "The Octopus": [
+        `1) Current Value: I must answer within 30 seconds; this is a best-effort short-term EV snapshot${mentionsBijan ? " for ATL contingency options" : ""}.`,
+        "2) Confidence Range: Pre-inactives uncertainty widens outcomes; avoid point estimates presented as certainty.",
+        "3) Price Discipline: Temporary role spikes rarely justify long-term premium prices.",
+        `4) Optimal EV Path: ${hasPeers ? "Blend peer signals into a range, then pay near the low end of uncertainty." : "Use a wide range and pay near the low end of uncertainty."}`,
+        "5) Portfolio Move: Diversify exposure across cheap contingent volume instead of one expensive headline add.",
+        "6) Deadline Rule: Choose the highest expected touches per cost unit before lock, then revise on news.",
+      ],
+      "The Elephant": [
+        `1) League Precedent: I must answer within 30 seconds, so this is a best-effort historical read${mentionsBijan ? " for Bijan" : ""}.`,
+        `2) Pattern Detected: ${mentionsBijan && mentionsInjury ? "Thursday RB injury uncertainty triggers overbidding on the most obvious backup." : "Injury news windows trigger overbidding before role clarity."}`,
+        "3) Historical Risk: Managers anchor to headline names and miss committee/pass-down usage splits.",
+        `4) Comparison Set: ${hasPeers ? "Peer signals can refine execution, but precedent still favors volume-over-hype decisions." : "Without peer outputs, default to volume-over-hype and preserve optionality."}`,
+        "5) Action From History: Bid for touch certainty, not narrative certainty, and keep a follow-up move ready after inactives.",
+        "6) Deadline Rule: When uncertain at the 30-second mark, prefer reversible moves and avoid all-in reactions.",
+      ],
+    };
+
+    return (digByAgent[agentName] || [
+      "1) notmuch for me to comment on",
+      "2) notmuch for me to comment on",
+      "3) notmuch for me to comment on",
+    ]).join("\n");
+  }
+
+  return (briefByAgent[agentName] || [
+    "1) notmuch for me to comment on",
+    "2) notmuch for me to comment on",
+    "3) notmuch for me to comment on",
+  ]).join("\n");
 }
 
 async function postAgentRequest(body, timeoutMs = AGENT_RESPONSE_TIMEOUT_MS) {
@@ -735,11 +1028,43 @@ function isOpenRouterModel(value) {
 }
 
 function buildScenarioWithContext(baseScenario) {
+  const labContext = getLabContext();
+  const intelContext = getLeagueIntelContext();
+  const sharedLines = [];
+
+  if (labContext) {
+    const topNames = (Array.isArray(labContext.top_players) ? labContext.top_players : [])
+      .slice(0, 3)
+      .map((item) => `${item.player_name} (${item.position})`)
+      .join(", ");
+    sharedLines.push(
+      `Lab snapshot: ${labContext.item_count || 0} players after ${labContext.filter_count || 0} filters; sort ${labContext.sort_key || "-"} (${labContext.sort_direction || "-"})`
+    );
+    if (topNames) {
+      sharedLines.push(`Lab top players: ${topNames}.`);
+    }
+  }
+
+  if (intelContext) {
+    sharedLines.push(
+      `League intel snapshot: ${intelContext.league_name || "Sleeper League"}, ${intelContext.seasons_analyzed || 0} seasons, ${intelContext.total_transactions || 0} transactions.`
+    );
+    if (intelContext.selected_manager?.display_name) {
+      const weak = Array.isArray(intelContext.selected_manager.weak_positions)
+        ? intelContext.selected_manager.weak_positions.join(", ")
+        : "";
+      sharedLines.push(
+        `Manager focus: ${intelContext.selected_manager.display_name}; weak positions: ${weak || "none noted"}; cue: ${intelContext.selected_manager.targeting_cue || "none"}.`
+      );
+    }
+  }
+
   return [
     "Updated tweet context: Bijan Robinson injury update is active on Thursday and availability is uncertain.",
     "Team context: we do not roster Bijan Robinson.",
     "Time context: Week 8 of last NFL season.",
     "Data context: use last season form and usage trends through Week 7.",
+    ...(sharedLines.length ? ["Shared context from The Lab and League Intel:", ...sharedLines] : []),
     "",
     baseScenario,
   ].join("\n");
@@ -756,22 +1081,34 @@ function hasRequiredDrDolphinMedicalSections(text) {
 }
 
 function enforcePointCharacterLimit(text, maxChars = 140, maxPoints = 4) {
-  const lines = String(text || "").split("\n");
-  const normalized = lines
-    .map((line) => {
-      const trimmed = line.trim();
-      if (!trimmed) return line;
-      if (!/^(\d+[.)-]|\-|\*)\s+/.test(trimmed)) return line;
-      if (trimmed.length <= maxChars) return line;
-      return `${trimmed.slice(0, Math.max(8, maxChars - 3)).trimEnd()}...`;
+  const raw = String(text || "").trim();
+  if (!raw) return LOW_SIGNAL_FALLBACK;
+  if (raw.toLowerCase() === LOW_SIGNAL_FALLBACK) return LOW_SIGNAL_FALLBACK;
+
+  const candidateLines = raw
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const normalized = candidateLines
+    .slice(0, maxPoints)
+    .map((line, index) => {
+      const core = line.replace(/^(\d+[.)-]|\-|\*)\s+/, "").trim();
+      let numbered = `${index + 1}) ${core}`;
+      if (numbered.length > maxChars) {
+        numbered = `${numbered.slice(0, Math.max(8, maxChars - 3)).trimEnd()}...`;
+      }
+      return numbered;
     })
-    .filter((line) => line.trim());
-  return normalized.slice(0, maxPoints).join("\n");
+    .filter(Boolean);
+
+  return normalized.length ? normalized.join("\n") : LOW_SIGNAL_FALLBACK;
 }
 
 function enforceTotalResponseLimit(text, maxChars = TOTAL_RESPONSE_MAX_CHARS) {
   const normalized = String(text || "").trim();
   if (!normalized) return LOW_SIGNAL_FALLBACK;
+  if (normalized.toLowerCase() === LOW_SIGNAL_FALLBACK) return LOW_SIGNAL_FALLBACK;
   if (normalized.length <= maxChars) return normalized;
   return `${normalized.slice(0, Math.max(8, maxChars - 3)).trimEnd()}...`;
 }

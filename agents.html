@@ -380,6 +380,66 @@
       line-height: 1.5;
     }
 
+    .scenario-bridge {
+      margin-top: 12px;
+      border: 1px solid rgba(34, 52, 39, 0.28);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.64);
+      padding: 10px 12px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .scenario-bridge-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px 10px;
+    }
+
+    .scenario-bridge h3 {
+      margin: 0;
+      font-family: "Bebas Neue", sans-serif;
+      letter-spacing: 0.04em;
+      font-size: 1.25rem;
+      color: #243225;
+    }
+
+    .scenario-bridge-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .scenario-bridge-link {
+      border-radius: 999px;
+      border: 1px solid rgba(37, 58, 41, 0.34);
+      background: rgba(247, 232, 196, 0.72);
+      padding: 4px 9px;
+      color: #243225;
+      text-decoration: none;
+      font-family: "Manrope", sans-serif;
+      font-size: 0.76rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+
+    .scenario-bridge-body {
+      display: grid;
+      gap: 6px;
+      font-family: "Manrope", sans-serif;
+      font-size: 0.86rem;
+      color: #2b3a2d;
+      line-height: 1.45;
+    }
+
+    .scenario-bridge-empty {
+      margin: 0;
+      color: rgba(46, 63, 50, 0.86);
+    }
+
     .scenario-grid {
       margin-top: 14px;
       display: grid;
@@ -857,6 +917,18 @@
           Trigger event: a Thursday afternoon report says Bijan Robinson is expected to miss time.
           Run each LLM agent below to get role-specific actions and insight.
         </p>
+        <div id="agents-context-bridge" class="scenario-bridge">
+          <div class="scenario-bridge-head">
+            <h3>Lab + Intel Context Feed</h3>
+            <div class="scenario-bridge-links">
+              <a class="scenario-bridge-link" href="./lab.html">Refresh Lab</a>
+              <a class="scenario-bridge-link" href="./league-intel.html">Refresh Intel</a>
+            </div>
+          </div>
+          <div id="agents-context-bridge-body" class="scenario-bridge-body">
+            <p class="scenario-bridge-empty">Run a screen in Lab and compute a report in League Intel to feed agent context.</p>
+          </div>
+        </div>
         <div class="scenario-input-wrap">
           <div class="scenario-inline">
             <div>
@@ -875,6 +947,6 @@
     </section>
   </main>
 
-  <script type="module" src="./agents.js?v=20260224f"></script>
+  <script type="module" src="./agents.js?v=20260225d"></script>
 </body>
 </html>
