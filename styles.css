@@ -1900,6 +1900,90 @@ h3 {
   justify-self: end;
 }
 
+.active-filter-controls input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 14px;
+  border-radius: 999px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(244, 239, 223, 0.25) 0 16px,
+      rgba(244, 239, 223, 0.65) 16px 17px
+    ),
+    linear-gradient(180deg, rgba(30, 83, 52, 0.96), rgba(21, 58, 37, 0.98));
+  border: 1px solid rgba(244, 239, 223, 0.44);
+  box-shadow: inset 0 1px 2px rgba(7, 20, 13, 0.34);
+  cursor: pointer;
+}
+
+.active-filter-controls input[type="range"]::-webkit-slider-runnable-track {
+  height: 14px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.active-filter-controls input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -5px;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 2px solid rgba(249, 245, 236, 0.92);
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 6px,
+      rgba(249, 245, 236, 0.95) 6px 8px,
+      transparent 8px 12px
+    ),
+    linear-gradient(180deg, rgba(176, 106, 57, 1), rgba(127, 71, 32, 1));
+  box-shadow: 0 2px 6px rgba(8, 21, 14, 0.36);
+}
+
+.active-filter-controls input[type="range"]::-moz-range-track {
+  height: 14px;
+  border-radius: 999px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(244, 239, 223, 0.25) 0 16px,
+      rgba(244, 239, 223, 0.65) 16px 17px
+    ),
+    linear-gradient(180deg, rgba(30, 83, 52, 0.96), rgba(21, 58, 37, 0.98));
+  border: 1px solid rgba(244, 239, 223, 0.44);
+}
+
+.active-filter-controls input[type="range"]::-moz-range-progress {
+  height: 14px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(232, 113, 34, 0.82), rgba(181, 83, 21, 0.85));
+}
+
+.active-filter-controls input[type="range"]::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 2px solid rgba(249, 245, 236, 0.92);
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 6px,
+      rgba(249, 245, 236, 0.95) 6px 8px,
+      transparent 8px 12px
+    ),
+    linear-gradient(180deg, rgba(176, 106, 57, 1), rgba(127, 71, 32, 1));
+  box-shadow: 0 2px 6px rgba(8, 21, 14, 0.36);
+}
+
+.active-filter-controls input[type="range"]:focus {
+  outline: none;
+  box-shadow:
+    inset 0 1px 2px rgba(7, 20, 13, 0.34),
+    0 0 0 3px rgba(232, 113, 34, 0.2);
+}
+
 .filter-actions {
   margin-top: 0.8rem;
   display: flex;
