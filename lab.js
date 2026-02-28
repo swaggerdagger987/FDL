@@ -83,22 +83,14 @@ let autoRunDebounceTimer = null;
 const dom = {
   search: document.querySelector("#screen-search"),
   team: document.querySelector("#screen-team"),
-  ageMin: document.querySelector("#screen-age-min"),
-  ageMax: document.querySelector("#screen-age-max"),
-  pprMin: document.querySelector("#screen-ppr-min"),
-  pprMax: document.querySelector("#screen-ppr-max"),
-  quickModeToggle: document.querySelector("#screen-quick-mode-toggle"),
-  quickFilterSearch: document.querySelector("#screen-quick-filter-search"),
-  quickMetricInputs: document.querySelector("#screen-quick-metric-inputs"),
+  openAdvancedBtn: document.querySelector("#screen-open-advanced"),
+  advancedDetails: document.querySelector(".lab-advanced"),
   positionPills: document.querySelector("#screen-position-pills"),
   metricSearch: document.querySelector("#metric-search"),
   metricCategories: document.querySelector("#screen-metric-categories"),
   metricSelect: document.querySelector("#metric-select"),
   addColumnBtn: document.querySelector("#screen-add-column"),
   addMetricBtn: document.querySelector("#screen-add-metric"),
-  customMetric: document.querySelector("#screen-custom-metric"),
-  addCustomColumnBtn: document.querySelector("#screen-add-custom-column"),
-  addCustomMetricBtn: document.querySelector("#screen-add-custom-metric"),
   activeColumns: document.querySelector("#screen-active-columns"),
   resetColumnsBtn: document.querySelector("#screen-reset-columns"),
   activeFilters: document.querySelector("#screen-active-filters"),
@@ -133,8 +125,6 @@ const state = {
   expandedPlayerIds: new Set(),
   lastItems: [],
   draggingColumnKey: "",
-  quickMetricRanges: {},
-  quickMetricMode: "top",
   showAppliedFilters: false
 };
 
@@ -166,8 +156,6 @@ async function initialize() {
   renderPositionPills();
   renderMetricCategories();
   renderMetricOptions();
-  renderQuickModeToggle();
-  renderQuickMetricInputs();
   renderActiveColumns();
   renderActiveFilters();
   renderAppliedFiltersSummary();
@@ -195,27 +183,14 @@ function wireEvents() {
   dom.metricSelect.addEventListener("dblclick", addSelectedAsColumn);
   dom.addColumnBtn.addEventListener("click", addSelectedAsColumn);
   dom.addMetricBtn.addEventListener("click", addSelectedAsFilter);
-  dom.addCustomColumnBtn.addEventListener("click", addCustomColumn);
-  dom.addCustomMetricBtn.addEventListener("click", addCustomFilter);
-
-  dom.customMetric.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter") return;
-    event.preventDefault();
-    addCustomColumn();
-  });
 
   dom.metricCategories.addEventListener("click", onMetricCategoryClick);
   dom.positionPills.addEventListener("click", onPositionPillClick);
-  if (dom.quickModeToggle) {
-    dom.quickModeToggle.addEventListener("click", onQuickModeClick);
-  }
-  if (dom.quickFilterSearch) {
-    dom.quickFilterSearch.addEventListener("input", () => {
-      renderQuickMetricInputs();
+  if (dom.openAdvancedBtn && dom.advancedDetails) {
+    dom.openAdvancedBtn.addEventListener("click", () => {
+      dom.advancedDetails.open = true;
+      dom.advancedDetails.scrollIntoView({ behavior: "smooth", block: "start" });
     });
-  }
-  if (dom.quickMetricInputs) {
-    dom.quickMetricInputs.addEventListener("input", onQuickMetricInput);
   }
 
   dom.activeColumns.addEventListener("click", onActiveColumnClick);
@@ -232,7 +207,7 @@ function wireEvents() {
   dom.head.addEventListener("click", onResultsHeadClick);
   dom.results.addEventListener("click", onResultsBodyClick);
 
-  [dom.search, dom.team, dom.ageMin, dom.ageMax, dom.pprMin, dom.pprMax].forEach((element) => {
+  [dom.search, dom.team].forEach((element) => {
     element.addEventListener("change", scheduleRunScreen);
     element.addEventListener("input", scheduleRunScreen);
   });
@@ -301,25 +276,7 @@ function collectAppliedFilters() {
     output.push({ group: "Universe", text: `Positions in ${[...state.selectedPositions].join(", ")}` });
   }
 
-  const ageMin = toNumberOrNull(dom.ageMin?.value);
-  const ageMax = toNumberOrNull(dom.ageMax?.value);
-  if (ageMin !== null || ageMax !== null) {
-    output.push({
-      group: "Universe",
-      text: formatRangePhrase("Age", ageMin, ageMax)
-    });
-  }
-
-  const pprMin = toNumberOrNull(dom.pprMin?.value);
-  const pprMax = toNumberOrNull(dom.pprMax?.value);
-  if (pprMin !== null || pprMax !== null) {
-    output.push({
-      group: "Universe",
-      text: formatRangePhrase("Fantasy PPR", pprMin, pprMax)
-    });
-  }
-
-  const metricFilters = buildFiltersPayload().filter((filter) => String(filter?.key || "") !== "fantasy_points_ppr");
+  const metricFilters = buildFiltersPayload();
   const appliedMetricKeys = new Set(metricFilters.map((filter) => `${String(filter.key)}::${String(filter.op || "")}`));
   for (const filter of metricFilters) {
     const label = getColumnLabel(filter.key);
@@ -978,20 +935,7 @@ function onActiveFilterChange(event) {
 
 function buildFiltersPayload() {
   const filters = [];
-  const quickPprFilter = buildQuickRangeFilter("fantasy_points_ppr", dom.pprMin?.value, dom.pprMax?.value);
-  const quickMetricFilters = buildQuickMetricFilters();
-  const excludedQuickKeys = new Set(quickMetricFilters.map((item) => item.key));
-  if (quickPprFilter) excludedQuickKeys.add("fantasy_points_ppr");
-  const activeFilters = state.activeFilters.filter((filter) => !excludedQuickKeys.has(String(filter.key || "").trim()));
-
-  if (quickPprFilter) {
-    filters.push(quickPprFilter);
-  }
-  for (const quickFilter of quickMetricFilters) {
-    filters.push(quickFilter);
-  }
-
-  for (const filter of activeFilters) {
+  for (const filter of state.activeFilters) {
     const key = String(filter.key || "").trim();
     const op = String(filter.op || "gte").trim();
     const value = toNumberOrNull(filter.value);
@@ -1049,8 +993,6 @@ async function runScreen() {
 
     const filters = buildFiltersPayload();
     const selectedPositions = [...state.selectedPositions];
-    const ageMin = toNumberOrNull(dom.ageMin.value);
-    const ageMax = toNumberOrNull(dom.ageMax.value);
     const metricColumns = buildRequestedMetricColumns(filters);
     const sortIsBuiltin = isBuiltinColumn(state.sortKey);
 
@@ -1058,8 +1000,6 @@ async function runScreen() {
       search: dom.search.value,
       team: dom.team.value,
       positions: selectedPositions,
-      age_min: ageMin,
-      age_max: ageMax,
       limit: 400,
       offset: 0,
       sort_key: sortIsBuiltin ? "fantasy_points_ppr" : state.sortKey,
@@ -1095,9 +1035,6 @@ async function runScreen() {
 
 function publishLabContext(sortedItems, filters) {
   const session = getSleeperSession();
-  const quickFilterCount = Object.values(state.quickMetricRanges || {}).filter(
-    (range) => String(range?.min || "").trim() || String(range?.max || "").trim()
-  ).length;
 
   setLabContext({
     league_id: String(session?.selected_league_id || ""),
@@ -1107,7 +1044,7 @@ function publishLabContext(sortedItems, filters) {
     sort_direction: String(state.sortDirection || "desc"),
     selected_positions: [...state.selectedPositions],
     active_columns: [...state.activeColumns].slice(0, 12),
-    quick_filter_count: quickFilterCount,
+    quick_filter_count: 0,
     top_players: (sortedItems || []).slice(0, 6).map((item) => ({
       player_name: String(item?.full_name || "-"),
       position: String(item?.position || "-"),
@@ -1655,20 +1592,6 @@ function getCurrentViewConfig() {
     version: 1,
     search: String(dom.search.value || ""),
     team: String(dom.team.value || ""),
-    age_min: String(dom.ageMin.value || ""),
-    age_max: String(dom.ageMax.value || ""),
-    ppr_min: String(dom.pprMin?.value || ""),
-    ppr_max: String(dom.pprMax?.value || ""),
-    quick_metric_ranges: Object.fromEntries(
-      Object.entries(state.quickMetricRanges || {}).map(([key, value]) => [
-        key,
-        {
-          min: String(value?.min ?? ""),
-          max: String(value?.max ?? "")
-        }
-      ])
-    ),
-    quick_metric_mode: state.quickMetricMode === "all" || state.quickMetricMode === "active" ? state.quickMetricMode : "top",
     positions: [...state.selectedPositions],
     active_columns: [...state.activeColumns],
     active_filters: state.activeFilters.map((item) => ({
@@ -1688,27 +1611,6 @@ function applyViewConfig(rawConfig) {
 
   dom.search.value = String(config.search || "");
   dom.team.value = String(config.team || "");
-  dom.ageMin.value = String(config.age_min || "");
-  dom.ageMax.value = String(config.age_max || "");
-  if (dom.pprMin) dom.pprMin.value = String(config.ppr_min || "");
-  if (dom.pprMax) dom.pprMax.value = String(config.ppr_max || "");
-  if (dom.quickFilterSearch) dom.quickFilterSearch.value = "";
-  {
-    const mode = String(config.quick_metric_mode || "top");
-    state.quickMetricMode = mode === "all" || mode === "active" ? mode : "top";
-  }
-  state.quickMetricRanges = {};
-  const quickRanges = config.quick_metric_ranges;
-  if (quickRanges && typeof quickRanges === "object") {
-    for (const [key, value] of Object.entries(quickRanges)) {
-      const normalizedKey = normalizeMetricKey(key);
-      if (!normalizedKey || normalizedKey === "fantasy_points_ppr") continue;
-      const min = String(value?.min ?? "");
-      const max = String(value?.max ?? "");
-      if (!min && !max) continue;
-      state.quickMetricRanges[normalizedKey] = { min, max };
-    }
-  }
 
   state.selectedPositions = new Set(
     (Array.isArray(config.positions) ? config.positions : [])
@@ -1732,8 +1634,6 @@ function applyViewConfig(rawConfig) {
 
   state.sortKey = String(config.sort_key || "fantasy_points_ppr");
   state.sortDirection = String(config.sort_direction || "desc") === "asc" ? "asc" : "desc";
-  renderQuickModeToggle();
-  renderQuickMetricInputs();
 }
 
 function normalizeOperator(value) {

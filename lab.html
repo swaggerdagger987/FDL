@@ -64,20 +64,6 @@
                 <option value="">All Teams</option>
               </select>
             </label>
-            <label>
-              Age Range
-              <div class="age-range-inputs">
-                <input id="screen-age-min" type="number" min="18" max="45" step="1" placeholder="Min" />
-                <input id="screen-age-max" type="number" min="18" max="45" step="1" placeholder="Max" />
-              </div>
-            </label>
-            <label>
-              PPR Range
-              <div class="age-range-inputs">
-                <input id="screen-ppr-min" type="number" step="0.1" placeholder="Min PPR" />
-                <input id="screen-ppr-max" type="number" step="0.1" placeholder="Max PPR" />
-              </div>
-            </label>
           </div>
           <div class="position-filter-group">
             <span class="filter-label">Positions</span>
@@ -94,6 +80,7 @@
           <div class="lab-runbar">
             <div class="filter-actions">
               <button id="screen-run" class="primary-btn" type="button">Run Screen</button>
+              <button id="screen-open-advanced" class="secondary-btn" type="button">Advanced Screener Builder</button>
               <button id="screen-refresh-db" class="secondary-btn" type="button">Refresh Live DB</button>
               <button id="screen-toggle-applied" class="secondary-btn" type="button">Applied Filters (0)</button>
             </div>
@@ -120,30 +107,16 @@
         <details class="lab-advanced">
           <summary>Advanced Screener Builder</summary>
           <div class="lab-advanced-grid">
-            <article class="quick-metric-panel lab-card">
-              <div class="active-filters-head">
-                <h3>Quick Numeric Filters</h3>
-                <p class="hint">Set min/max filters fast across any metric.</p>
-              </div>
-              <div class="quick-mode-toggle" id="screen-quick-mode-toggle" role="group" aria-label="Quick filter mode">
-                <button type="button" class="quick-mode-btn active" data-mode="top">Top Metrics</button>
-                <button type="button" class="quick-mode-btn" data-mode="all">All Matching</button>
-                <button type="button" class="quick-mode-btn" data-mode="active">Only Active</button>
-              </div>
-              <label>
-                Find metric input
-                <input id="screen-quick-filter-search" placeholder="Type metric name or key..." />
-              </label>
-              <div id="screen-quick-metric-inputs" class="quick-metric-inputs"></div>
-            </article>
-
             <article class="metric-catalog-panel lab-card">
               <div class="lab-card-head">
                 <h3>Metric Library</h3>
               </div>
               <label>
                 Find Metric
-                <input id="metric-search" placeholder="Type: age, yac, air yards..." />
+                <div class="metric-find-row">
+                  <input id="metric-search" placeholder="Type: age, yac, air yards..." />
+                  <a class="secondary-btn metric-help-link" href="./metric-help.html">Metric Help</a>
+                </div>
               </label>
               <div id="screen-metric-categories" class="metric-categories" aria-label="Metric categories"></div>
               <label>
@@ -154,36 +127,28 @@
                 <button id="screen-add-column" class="secondary-btn" type="button">Add as Column</button>
                 <button id="screen-add-metric" class="secondary-btn" type="button">Add as Filter</button>
               </div>
-              <label>
-                Custom Metric Key
-                <input id="screen-custom-metric" placeholder="Example: receiving_yards_after_catch" />
-              </label>
-              <div class="metric-select-actions">
-                <button id="screen-add-custom-column" class="secondary-btn" type="button">Custom Column</button>
-                <button id="screen-add-custom-metric" class="secondary-btn" type="button">Custom Filter</button>
-              </div>
-            </article>
-
-            <article class="active-columns-panel data-panel lab-card">
-              <div class="lab-section-head">
-                <div class="active-filters-head">
-                  <h3>Output Columns</h3>
-                  <p class="hint">Drag to reorder and trim noise.</p>
-                </div>
-                <button id="screen-reset-columns" class="secondary-btn" type="button">Reset Columns</button>
-              </div>
-              <div id="screen-active-columns" class="active-columns"></div>
-            </article>
-
-            <article class="saved-views-panel lab-card">
-              <div class="active-filters-head">
-                <h3>Saved Screens</h3>
-                <button id="screen-clear-saved-views" class="secondary-btn" type="button">Clear Saved</button>
-              </div>
-              <div id="screen-saved-views" class="saved-views"></div>
             </article>
           </div>
         </details>
+
+        <article class="active-columns-panel data-panel lab-card">
+          <div class="lab-section-head">
+            <div class="active-filters-head">
+              <h3>Output Columns</h3>
+              <p class="hint">Drag to reorder and trim noise.</p>
+            </div>
+            <button id="screen-reset-columns" class="secondary-btn" type="button">Reset Columns</button>
+          </div>
+          <div id="screen-active-columns" class="active-columns"></div>
+        </article>
+
+        <article class="saved-views-panel lab-card">
+          <div class="active-filters-head">
+            <h3>Saved Screens</h3>
+            <button id="screen-clear-saved-views" class="secondary-btn" type="button">Clear Saved</button>
+          </div>
+          <div id="screen-saved-views" class="saved-views"></div>
+        </article>
 
         <article class="data-panel lab-card lab-results-card">
           <div class="results-head">
