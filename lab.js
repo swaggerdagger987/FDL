@@ -966,7 +966,7 @@ function publishLabContext(sortedItems, filters) {
 }
 
 async function postScreenerQuery(request, signal) {
-  const endpoints = ["/api/v2/screener/query", "/api/screener/query"];
+  const endpoints = ["/api/screener/query", "/api/v2/screener/query"];
   const failures = [];
 
   for (const endpoint of endpoints) {
@@ -979,6 +979,9 @@ async function postScreenerQuery(request, signal) {
         signal
       });
     } catch (error) {
+      if (error?.name === "AbortError") {
+        throw error;
+      }
       failures.push(`${endpoint} network error (${error.message})`);
       continue;
     }
