@@ -1889,8 +1889,12 @@ h3 {
 .active-filter-controls {
   display: grid;
   gap: 0.48rem;
-  grid-template-columns: minmax(86px, 1fr) minmax(86px, 1fr) minmax(86px, 1fr) auto;
+  grid-template-columns: repeat(4, minmax(86px, 1fr));
   align-items: end;
+}
+
+.active-filter-controls button {
+  grid-column: 1 / -1;
 }
 
 .filter-actions {

@@ -399,7 +399,7 @@ async function loadMetricOptions() {
 function applyFallbackMetricOptions() {
   state.metricOptions = FALLBACK_METRIC_KEYS.map((key) => ({
     key,
-    label: prettifyStatKey(key),
+    label: simplifyMetricLabel(key),
     minValue: Number.NaN,
     maxValue: Number.NaN,
     playerCount: 0,
@@ -413,7 +413,7 @@ function applyMetricOptions(items) {
     const key = String(item.key);
     return {
       key,
-      label: String(item.label || item.key),
+      label: simplifyMetricLabel(key, item.label),
       minValue: Number(item.min_value),
       maxValue: Number(item.max_value),
       playerCount: Number(item.player_count || 0),
@@ -546,11 +546,7 @@ function renderMetricOptions() {
   dom.metricSelect.innerHTML = filtered
     .map((item) => {
       const selected = item.key === currentValue ? "selected" : "";
-      const range = formatRange(item.minValue, item.maxValue);
-      const suffix = Number.isFinite(item.playerCount) && item.playerCount > 0 ? ` | ${item.playerCount} players` : "";
-      return `<option value="${escapeHtml(item.key)}" ${selected}>${escapeHtml(item.label)} (${escapeHtml(
-        item.key
-      )}) | ${escapeHtml(range)}${escapeHtml(suffix)}</option>`;
+      return `<option value="${escapeHtml(item.key)}" ${selected}>${escapeHtml(item.label)}</option>`;
     })
     .join("");
 
@@ -741,16 +737,20 @@ function addFilter(key) {
     return;
   }
   const option = state.metricIndex.get(normalizedKey);
+  const bounds = getMetricBounds(normalizedKey);
   state.activeFilters.push({
     key: normalizedKey,
-    label: option?.label || prettifyStatKey(normalizedKey),
-    op: "gte",
-    value: "",
-    valueMax: ""
+    label: option?.label || simplifyMetricLabel(normalizedKey),
+    op: "between",
+    value: String(bounds.min),
+    valueMax: String(bounds.max),
+    boundMin: bounds.min,
+    boundMax: bounds.max,
+    step: bounds.step
   });
   renderActiveFilters();
   renderAppliedFiltersSummary();
-  setStatus(`Added filter: ${option?.label || normalizedKey}. Set a value, then run screen.`, "info");
+  setStatus(`Added filter: ${option?.label || normalizedKey}.`, "info");
 }
 
 function clearFilters() {
@@ -769,23 +769,29 @@ function renderActiveFilters() {
 
   dom.activeFilters.innerHTML = state.activeFilters
     .map((filter, index) => {
-      const between = filter.op === "between";
+      const bounds = getMetricBounds(filter.key);
+      const step = bounds.step;
+      const boundMin = Number.isFinite(Number(filter.boundMin)) ? Number(filter.boundMin) : bounds.min;
+      const boundMax = Number.isFinite(Number(filter.boundMax)) ? Number(filter.boundMax) : bounds.max;
+      const rawMin = toNumberOrNull(filter.value);
+      const rawMax = toNumberOrNull(filter.valueMax);
+      const value = clamp(rawMin === null ? boundMin : rawMin, boundMin, boundMax);
+      const valueMax = clamp(rawMax === null ? boundMax : rawMax, boundMin, boundMax);
+      const left = Math.min(value, valueMax);
+      const right = Math.max(value, valueMax);
       return `
         <div class="active-filter-row" data-index="${index}">
           <div class="active-filter-copy">
             <p class="active-filter-title">${escapeHtml(filter.label)}</p>
-            <p class="active-filter-meta">${escapeHtml(filter.key)}</p>
+            <p class="active-filter-meta">${escapeHtml(filter.key)} | ${formatCompact(boundMin)} to ${formatCompact(
+              boundMax
+            )}</p>
           </div>
           <div class="active-filter-controls">
-            <select data-field="op">
-              ${operatorOptionsMarkup(filter.op)}
-            </select>
-            <input data-field="value" type="number" step="0.01" placeholder="Value" value="${escapeHtml(
-              filter.value
-            )}" />
-            <input data-field="value_max" type="number" step="0.01" placeholder="Max" value="${escapeHtml(
-              filter.valueMax
-            )}" class="${between ? "" : "hidden"}" />
+            <input data-field="value" type="range" min="${boundMin}" max="${boundMax}" step="${step}" value="${left}" />
+            <input data-field="value_max" type="range" min="${boundMin}" max="${boundMax}" step="${step}" value="${right}" />
+            <input data-field="value" type="number" step="${step}" value="${left}" />
+            <input data-field="value_max" type="number" step="${step}" value="${right}" />
             <button class="secondary-btn" type="button" data-action="remove-filter">Remove</button>
           </div>
         </div>
@@ -814,12 +820,30 @@ function onActiveFilterInput(event) {
   if (!Number.isInteger(index) || !state.activeFilters[index]) return;
   const field = event.target.dataset.field;
   if (!field) return;
+  const filter = state.activeFilters[index];
+  const bounds = getMetricBounds(filter.key);
+  const minBound = Number.isFinite(Number(filter.boundMin)) ? Number(filter.boundMin) : bounds.min;
+  const maxBound = Number.isFinite(Number(filter.boundMax)) ? Number(filter.boundMax) : bounds.max;
 
   if (field === "value") {
-    state.activeFilters[index].value = event.target.value;
+    const numeric = toNumberOrNull(event.target.value);
+    if (numeric === null) return;
+    filter.value = String(clamp(numeric, minBound, maxBound));
   } else if (field === "value_max") {
-    state.activeFilters[index].valueMax = event.target.value;
+    const numeric = toNumberOrNull(event.target.value);
+    if (numeric === null) return;
+    filter.valueMax = String(clamp(numeric, minBound, maxBound));
   }
+  const currentMin = toNumberOrNull(filter.value);
+  const currentMax = toNumberOrNull(filter.valueMax);
+  if (currentMin !== null && currentMax !== null && currentMin > currentMax) {
+    if (field === "value") {
+      filter.valueMax = filter.value;
+    } else {
+      filter.value = filter.valueMax;
+    }
+  }
+  renderActiveFilters();
   renderAppliedFiltersSummary();
   scheduleRunScreen();
 }
@@ -1506,13 +1530,20 @@ function applyViewConfig(rawConfig) {
   );
 
   state.activeFilters = (Array.isArray(config.active_filters) ? config.active_filters : [])
-    .map((item) => ({
-      key: String(item.key || "").trim(),
-      label: String(item.label || prettifyStatKey(item.key || "")),
-      op: normalizeOperator(item.op),
-      value: String(item.value ?? ""),
-      valueMax: String(item.valueMax ?? item.value_max ?? "")
-    }))
+    .map((item) => {
+      const key = String(item.key || "").trim();
+      const bounds = getMetricBounds(key);
+      return {
+        key,
+        label: String(item.label || simplifyMetricLabel(item.key || "")),
+        op: "between",
+        value: String(item.value ?? bounds.min),
+        valueMax: String(item.valueMax ?? item.value_max ?? bounds.max),
+        boundMin: bounds.min,
+        boundMax: bounds.max,
+        step: bounds.step
+      };
+    })
     .filter((item) => item.key);
 
   state.sortKey = String(config.sort_key || "fantasy_points_ppr");
@@ -1736,6 +1767,38 @@ function formatRange(minValue, maxValue) {
   if (!Number.isFinite(min)) return `<= ${formatCompact(max)}`;
   if (!Number.isFinite(max)) return `>= ${formatCompact(min)}`;
   return `${formatCompact(min)} to ${formatCompact(max)}`;
+}
+
+function simplifyMetricLabel(key, fallbackLabel = "") {
+  const fromKey = prettifyStatKey(String(key || ""));
+  if (fromKey && fromKey !== "Metric") {
+    return fromKey;
+  }
+  return prettifyStatKey(String(fallbackLabel || "Metric"));
+}
+
+function getMetricBounds(key) {
+  const option = state.metricIndex.get(String(key || "").trim());
+  let min = Number(option?.minValue);
+  let max = Number(option?.maxValue);
+  if (!Number.isFinite(min)) min = 0;
+  if (!Number.isFinite(max)) max = 100;
+  if (min > max) {
+    const temp = min;
+    min = max;
+    max = temp;
+  }
+  if (min === max) {
+    min -= 1;
+    max += 1;
+  }
+  const span = Math.abs(max - min);
+  const step = span <= 10 ? 0.1 : span <= 100 ? 0.5 : 1;
+  return { min, max, step };
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function formatCompact(value) {
