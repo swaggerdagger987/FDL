@@ -38,6 +38,7 @@
 html {
   color-scheme: light;
   scroll-behavior: smooth;
+  scroll-padding-top: 90px;
 }
 
 body {
@@ -52,6 +53,7 @@ body {
     radial-gradient(620px 320px at 88% 24%, rgba(103, 180, 218, 0.24), transparent 62%),
     linear-gradient(165deg, var(--field-950) 0%, var(--field-900) 48%, var(--field-850) 100%);
   position: relative;
+  scroll-behavior: smooth;
 }
 
 body::before,
@@ -3005,23 +3007,69 @@ button:disabled,
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(55, 70, 54, 0.45) rgba(255, 255, 255, 0.25);
+  scrollbar-color: #7b451f #2f6446;
 }
 
 *::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
+}
+
+*::-webkit-scrollbar-track {
+  background:
+    linear-gradient(180deg, rgba(47, 100, 70, 0.95), rgba(27, 65, 44, 0.96));
+  border-radius: 999px;
+  border: 1px solid rgba(245, 245, 230, 0.28);
 }
 
 *::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: rgba(55, 70, 54, 0.45);
-  border: 2px solid rgba(255, 255, 255, 0.5);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(148, 86, 44, 0.98) 0%,
+      rgba(123, 69, 31, 0.98) 52%,
+      rgba(98, 53, 24, 0.98) 100%
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 7px,
+      rgba(246, 241, 227, 0.95) 7px 9px,
+      transparent 9px 15px
+    );
+  border: 1px solid rgba(246, 241, 227, 0.6);
 }
 
-*::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.26);
-  border-radius: 999px;
+*::-webkit-scrollbar-thumb:hover {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(170, 100, 52, 1) 0%,
+      rgba(142, 79, 37, 1) 52%,
+      rgba(108, 57, 25, 1) 100%
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 7px,
+      rgba(250, 246, 236, 1) 7px 9px,
+      transparent 9px 15px
+    );
+}
+
+*::-webkit-scrollbar-button {
+  height: 12px;
+  width: 12px;
+  background: linear-gradient(180deg, rgba(18, 48, 31, 0.95), rgba(27, 65, 44, 0.95));
+}
+
+.table-wrap,
+.active-filters,
+.saved-views,
+.metric-select,
+.applied-filters-list,
+.lab-table-wrap {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
 }
 
 @media (max-width: 1120px) {
