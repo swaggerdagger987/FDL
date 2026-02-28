@@ -117,7 +117,9 @@ const dom = {
   count: document.querySelector("#screen-count"),
   sort: document.querySelector("#screen-sort"),
   head: document.querySelector("#screen-results-head"),
-  results: document.querySelector("#screen-results")
+  results: document.querySelector("#screen-results"),
+  scrollUpBtn: document.querySelector("#lab-scroll-up"),
+  scrollDownBtn: document.querySelector("#lab-scroll-down")
 };
 
 const state = {
@@ -223,6 +225,13 @@ function wireEvents() {
   dom.savedViews.addEventListener("click", onSavedViewsClick);
   dom.head.addEventListener("click", onResultsHeadClick);
   dom.results.addEventListener("click", onResultsBodyClick);
+  if (dom.scrollUpBtn) {
+    dom.scrollUpBtn.addEventListener("click", () => window.scrollBy({ top: -520, behavior: "smooth" }));
+  }
+  if (dom.scrollDownBtn) {
+    dom.scrollDownBtn.addEventListener("click", () => window.scrollBy({ top: 520, behavior: "smooth" }));
+  }
+  window.addEventListener("scroll", updateScrollButtons, { passive: true });
 
   [dom.search, dom.team].forEach((element) => {
     element.addEventListener("change", scheduleRunScreen);
@@ -1760,6 +1769,15 @@ function scheduleCustomScrollbarRefresh() {
     const hosts = document.querySelectorAll(".fdl-scroll-host");
     hosts.forEach((host) => updateCustomScrollbar(host));
   });
+  updateScrollButtons();
+}
+
+function updateScrollButtons() {
+  if (!dom.scrollUpBtn || !dom.scrollDownBtn) return;
+  const top = window.scrollY || document.documentElement.scrollTop || 0;
+  const maxTop = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+  dom.scrollUpBtn.classList.toggle("hidden", top < 40);
+  dom.scrollDownBtn.classList.toggle("hidden", top > maxTop - 40);
 }
 
 function updateCustomScrollbar(host) {

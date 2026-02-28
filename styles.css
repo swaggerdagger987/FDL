@@ -1896,7 +1896,8 @@ h3 {
 }
 
 .active-filter-controls button {
-  grid-column: 1 / -1;
+  grid-column: auto;
+  justify-self: end;
 }
 
 .filter-actions {
@@ -3155,6 +3156,44 @@ body::-webkit-scrollbar-thumb:hover,
 
 .fdl-scroll-thumb:active {
   cursor: grabbing;
+}
+
+.lab-scroll-buttons {
+  position: fixed;
+  right: 14px;
+  bottom: 18px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lab-scroll-btn {
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  border: 2px solid rgba(247, 243, 230, 0.85);
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 9px,
+      rgba(252, 248, 239, 1) 9px 11px,
+      transparent 11px 18px
+    ),
+    linear-gradient(180deg, rgba(165, 97, 49, 1), rgba(123, 69, 31, 1));
+  color: #fff8e8;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 6px 12px rgba(6, 16, 11, 0.35);
+  transition: transform 120ms ease, opacity 120ms ease;
+}
+
+.lab-scroll-btn:hover {
+  transform: translateY(-1px);
+}
+
+.lab-scroll-btn.hidden {
+  opacity: 0.25;
 }
 
 @media (max-width: 1120px) {
