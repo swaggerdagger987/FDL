@@ -66,12 +66,13 @@ const DEFAULT_COLUMNS = [
 
 const METRIC_CATEGORIES = [
   { key: "all", label: "All" },
-  { key: "bio", label: "Bio" },
-  { key: "production", label: "Production" },
-  { key: "efficiency", label: "Efficiency" },
-  { key: "advanced", label: "Advanced" },
-  { key: "dynasty", label: "Dynasty" },
-  { key: "my_league", label: "My League" }
+  { key: "universal", label: "Universal" },
+  { key: "qb", label: "QB Lens" },
+  { key: "rb", label: "RB Lens" },
+  { key: "wr", label: "WR Lens" },
+  { key: "te", label: "TE Lens" },
+  { key: "context", label: "Context" },
+  { key: "value", label: "Value" }
 ];
 
 const POSITION_ORDER = ["QB", "RB", "WR", "TE", "K", "PICK"];
@@ -108,6 +109,10 @@ const dom = {
   shareViewBtn: document.querySelector("#screen-share-view"),
   runBtn: document.querySelector("#screen-run"),
   refreshBtn: document.querySelector("#screen-refresh-db"),
+  toggleAppliedBtn: document.querySelector("#screen-toggle-applied"),
+  appliedPanel: document.querySelector("#screen-applied-panel"),
+  appliedSummary: document.querySelector("#screen-applied-summary"),
+  appliedList: document.querySelector("#screen-applied-list"),
   status: document.querySelector("#screen-status"),
   count: document.querySelector("#screen-count"),
   sort: document.querySelector("#screen-sort"),
@@ -129,7 +134,8 @@ const state = {
   lastItems: [],
   draggingColumnKey: "",
   quickMetricRanges: {},
-  quickMetricMode: "top"
+  quickMetricMode: "top",
+  showAppliedFilters: false
 };
 
 initialize();
@@ -164,6 +170,7 @@ async function initialize() {
   renderQuickMetricInputs();
   renderActiveColumns();
   renderActiveFilters();
+  renderAppliedFiltersSummary();
   renderSavedViews();
   updateSortLabel();
 
@@ -177,6 +184,7 @@ async function initialize() {
 function wireEvents() {
   dom.runBtn.addEventListener("click", runScreen);
   dom.refreshBtn.addEventListener("click", refreshDatabase);
+  dom.toggleAppliedBtn?.addEventListener("click", toggleAppliedFilters);
   dom.clearFilters.addEventListener("click", clearFilters);
   dom.resetColumnsBtn.addEventListener("click", resetColumns);
   dom.clearSavedViewsBtn.addEventListener("click", clearSavedViews);
@@ -237,10 +245,134 @@ function wireEvents() {
 }
 
 function scheduleRunScreen() {
+  renderAppliedFiltersSummary();
   clearTimeout(autoRunDebounceTimer);
   autoRunDebounceTimer = setTimeout(() => {
     runScreen();
   }, FILTER_AUTO_RUN_DEBOUNCE_MS);
+}
+
+function toggleAppliedFilters() {
+  state.showAppliedFilters = !state.showAppliedFilters;
+  renderAppliedFiltersSummary();
+}
+
+function renderAppliedFiltersSummary() {
+  const applied = collectAppliedFilters();
+  if (dom.toggleAppliedBtn) {
+    dom.toggleAppliedBtn.textContent = `${state.showAppliedFilters ? "Hide" : "Applied"} Filters (${applied.length})`;
+  }
+
+  if (!dom.appliedPanel || !dom.appliedList || !dom.appliedSummary) return;
+  dom.appliedPanel.classList.toggle("hidden", !state.showAppliedFilters);
+  dom.appliedSummary.textContent = `${applied.length} active filter${applied.length === 1 ? "" : "s"}`;
+
+  if (!applied.length) {
+    dom.appliedList.innerHTML = `<p class="chip-empty">No filters are currently applied.</p>`;
+    return;
+  }
+
+  dom.appliedList.innerHTML = applied
+    .map(
+      (entry) => `
+      <div class="applied-filter-pill">
+        <span class="applied-filter-group">${escapeHtml(entry.group)}</span>
+        <span class="applied-filter-text">${escapeHtml(entry.text)}</span>
+      </div>
+    `
+    )
+    .join("");
+}
+
+function collectAppliedFilters() {
+  const output = [];
+
+  const search = String(dom.search?.value || "").trim();
+  if (search) {
+    output.push({ group: "Universe", text: `Name contains "${search}"` });
+  }
+
+  const team = String(dom.team?.value || "").trim();
+  if (team) {
+    output.push({ group: "Universe", text: `Team = ${team}` });
+  }
+
+  if (state.selectedPositions.size > 0) {
+    output.push({ group: "Universe", text: `Positions in ${[...state.selectedPositions].join(", ")}` });
+  }
+
+  const ageMin = toNumberOrNull(dom.ageMin?.value);
+  const ageMax = toNumberOrNull(dom.ageMax?.value);
+  if (ageMin !== null || ageMax !== null) {
+    output.push({
+      group: "Universe",
+      text: formatRangePhrase("Age", ageMin, ageMax)
+    });
+  }
+
+  const pprMin = toNumberOrNull(dom.pprMin?.value);
+  const pprMax = toNumberOrNull(dom.pprMax?.value);
+  if (pprMin !== null || pprMax !== null) {
+    output.push({
+      group: "Universe",
+      text: formatRangePhrase("Fantasy PPR", pprMin, pprMax)
+    });
+  }
+
+  const metricFilters = buildFiltersPayload().filter((filter) => String(filter?.key || "") !== "fantasy_points_ppr");
+  const appliedMetricKeys = new Set(metricFilters.map((filter) => `${String(filter.key)}::${String(filter.op || "")}`));
+  for (const filter of metricFilters) {
+    const label = getColumnLabel(filter.key);
+    output.push({ group: "Metric", text: formatMetricFilterPhrase(label, filter) });
+  }
+
+  for (const filter of state.activeFilters) {
+    const key = normalizeMetricKey(filter.key);
+    if (!key) continue;
+    const op = String(filter.op || "gte");
+    const value = toNumberOrNull(filter.value);
+    const valueMax = toNumberOrNull(filter.valueMax);
+    const isApplied = op === "between" ? value !== null && valueMax !== null : value !== null;
+    if (isApplied && appliedMetricKeys.has(`${key}::${op}`)) continue;
+    if (!isApplied) {
+      output.push({
+        group: "Metric Draft",
+        text: `${filter.label || getColumnLabel(key)} (value not set yet)`
+      });
+    }
+  }
+
+  return output;
+}
+
+function formatRangePhrase(label, min, max) {
+  if (min !== null && max !== null) {
+    return `${label} between ${formatCompact(min)} and ${formatCompact(max)}`;
+  }
+  if (min !== null) {
+    return `${label} >= ${formatCompact(min)}`;
+  }
+  return `${label} <= ${formatCompact(max)}`;
+}
+
+function formatMetricFilterPhrase(label, filter) {
+  const op = String(filter?.op || "gte");
+  const value = filter?.value;
+  const valueMax = filter?.value_max;
+
+  if (op === "between") {
+    return `${label} between ${formatCompact(value)} and ${formatCompact(valueMax)}`;
+  }
+
+  const operatorMap = {
+    gte: ">=",
+    lte: "<=",
+    gt: ">",
+    lt: "<",
+    eq: "="
+  };
+  const symbol = operatorMap[op] || op;
+  return `${label} ${symbol} ${formatCompact(value)}`;
 }
 
 async function loadTeamOptions() {
@@ -349,8 +481,12 @@ function onMetricCategoryClick(event) {
 }
 
 function renderMetricCategories() {
+  const categoryKeys = new Set(METRIC_CATEGORIES.map((item) => item.key));
+  if (!categoryKeys.has(state.selectedCategory)) {
+    state.selectedCategory = "all";
+  }
   const counts = countMetricsByCategory();
-  dom.metricCategories.innerHTML = METRIC_CATEGORIES.filter((item) => item.key !== "my_league" || counts.my_league > 0)
+  dom.metricCategories.innerHTML = METRIC_CATEGORIES
     .map((item) => {
       const selected = item.key === state.selectedCategory;
       const count = item.key === "all" ? state.metricOptions.length : counts[item.key] || 0;
@@ -370,19 +506,20 @@ function renderMetricCategories() {
 
 function countMetricsByCategory() {
   const counts = {
-    bio: 0,
-    production: 0,
-    efficiency: 0,
-    advanced: 0,
-    dynasty: 0,
-    my_league: 0
+    universal: 0,
+    qb: 0,
+    rb: 0,
+    wr: 0,
+    te: 0,
+    context: 0,
+    value: 0
   };
   for (const item of state.metricOptions) {
     const category = item.category;
     if (counts[category] !== undefined) {
       counts[category] += 1;
     } else {
-      counts.advanced += 1;
+      counts.universal += 1;
     }
   }
   return counts;
@@ -746,12 +883,15 @@ function addFilter(key) {
     valueMax: ""
   });
   renderActiveFilters();
+  renderAppliedFiltersSummary();
   setStatus(`Added filter: ${option?.label || normalizedKey}. Set a value, then run screen.`, "info");
 }
 
 function clearFilters() {
   state.activeFilters = [];
   renderActiveFilters();
+  renderAppliedFiltersSummary();
+  scheduleRunScreen();
   setStatus("Cleared all metric filters.", "info");
 }
 
@@ -797,6 +937,8 @@ function onActiveFilterClick(event) {
   if (!Number.isInteger(index)) return;
   state.activeFilters.splice(index, 1);
   renderActiveFilters();
+  renderAppliedFiltersSummary();
+  scheduleRunScreen();
 }
 
 function onActiveFilterInput(event) {
@@ -812,6 +954,8 @@ function onActiveFilterInput(event) {
   } else if (field === "value_max") {
     state.activeFilters[index].valueMax = event.target.value;
   }
+  renderAppliedFiltersSummary();
+  scheduleRunScreen();
 }
 
 function onActiveFilterChange(event) {
@@ -828,6 +972,8 @@ function onActiveFilterChange(event) {
     state.activeFilters[index].valueMax = "";
   }
   renderActiveFilters();
+  renderAppliedFiltersSummary();
+  scheduleRunScreen();
 }
 
 function buildFiltersPayload() {
@@ -943,6 +1089,7 @@ async function runScreen() {
     setStatus(`Screen failed: ${error.message}. Make sure you started: python3 terminal_server.py`, "error");
   } finally {
     dom.runBtn.disabled = false;
+    renderAppliedFiltersSummary();
   }
 }
 
@@ -1726,41 +1873,64 @@ function base64UrlDecode(value) {
 
 function categorizeMetricKey(key) {
   const token = String(key || "").toLowerCase();
-  if (!token) return "advanced";
+  if (!token) return "universal";
 
   if (
-    ["age", "years_exp", "height", "weight", "draft", "birth", "college", "rookie"].some((part) =>
+    [
+      "league_",
+      "owner",
+      "roster",
+      "available",
+      "starter",
+      "bench",
+      "waiver",
+      "schedule",
+      "matchup",
+      "depth_chart",
+      "opponent",
+      "team_"
+    ].some((part) => token.includes(part))
+  ) {
+    return "context";
+  }
+
+  if (
+    ["ktc", "dynasty", "adp", "market", "value", "pick_value", "draft_capital", "rank", "ecr"].some((part) =>
       token.includes(part)
     )
   ) {
-    return "bio";
+    return "value";
   }
 
   if (
-    ["fantasy_points", "yards", "targets", "receptions", "attempts", "touchdowns", "carries", "snaps"].some((part) =>
+    ["passing", "pass_", "qb", "completion", "interception", "sack", "air_yards", "cpoe"].some((part) =>
       token.includes(part)
     )
   ) {
-    return "production";
+    return "qb";
   }
 
   if (
-    ["share", "pct", "percentage", "per_", "rate", "yac", "air", "yprr", "wopr", "epa", "efficiency"].some((part) =>
+    ["rushing", "rush_", "carry", "goal_line", "yards_after_contact", "broken_tackle"].some((part) =>
       token.includes(part)
     )
   ) {
-    return "efficiency";
+    return "rb";
   }
 
-  if (["ktc", "dynasty", "adp", "market", "value", "pick_value", "draft_capital"].some((part) => token.includes(part))) {
-    return "dynasty";
+  if (["tight_end", "te_", "_te", "te_target"].some((part) => token.includes(part))) {
+    return "te";
   }
 
-  if (["owner", "roster", "available", "starter", "bench", "waiver", "league_"].some((part) => token.includes(part))) {
-    return "my_league";
+  if (
+    ["receiving", "target", "reception", "wopr", "yac", "yards_per_route_run", "air_yards_share"].some((part) =>
+      token.includes(part)
+    )
+  ) {
+    return "wr";
   }
 
-  return "advanced";
+  return "universal";
 }
 
 function operatorOptionsMarkup(selected) {

@@ -35,27 +35,50 @@
       <section class="hero-panel fade-in">
         <p class="eyebrow">THE LAB</p>
         <div class="lab-section-head">
-          <h1>Build custom dynasty screens in seconds.</h1>
+          <h1>Build multi-use screens like a capital-markets terminal.</h1>
           <div class="lab-actions">
             <button id="screen-save-view" class="secondary-btn" type="button">Save View</button>
             <button id="screen-share-view" class="secondary-btn" type="button">Share View Link</button>
           </div>
         </div>
         <p class="subhead">
-          Stack any metrics, save your favorite setups, and share screenshot-ready outputs with your league.
+          Define your universe, stack custom criteria, and iterate quickly to isolate the exact players you are looking for.
         </p>
       </section>
 
       <div class="hand-divider" aria-hidden="true"></div>
 
-      <section class="panel data-panel">
-        <h2>Filters</h2>
-        <div class="control-grid lab-filter-grid">
-          <label>
-            Search
-            <input id="screen-search" placeholder="Player name..." />
-          </label>
-
+      <section class="panel data-panel lab-slim-shell">
+        <article class="lab-card lab-slim-top">
+          <div class="lab-card-head">
+            <h2>Core Screen</h2>
+          </div>
+          <div class="lab-universe-grid">
+            <label>
+              Search
+              <input id="screen-search" placeholder="Player name..." />
+            </label>
+            <label>
+              Team
+              <select id="screen-team">
+                <option value="">All Teams</option>
+              </select>
+            </label>
+            <label>
+              Age Range
+              <div class="age-range-inputs">
+                <input id="screen-age-min" type="number" min="18" max="45" step="1" placeholder="Min" />
+                <input id="screen-age-max" type="number" min="18" max="45" step="1" placeholder="Max" />
+              </div>
+            </label>
+            <label>
+              PPR Range
+              <div class="age-range-inputs">
+                <input id="screen-ppr-min" type="number" step="0.1" placeholder="Min PPR" />
+                <input id="screen-ppr-max" type="number" step="0.1" placeholder="Max PPR" />
+              </div>
+            </label>
+          </div>
           <div class="position-filter-group">
             <span class="filter-label">Positions</span>
             <div id="screen-position-pills" class="position-pills" role="group" aria-label="Position filters">
@@ -68,127 +91,114 @@
               <button class="position-pill" type="button" data-position="PICK">PICK</button>
             </div>
           </div>
-
-          <label>
-            Team
-            <select id="screen-team">
-              <option value="">All Teams</option>
-            </select>
-          </label>
-
-          <label>
-            Age Range
-            <div class="age-range-inputs">
-              <input id="screen-age-min" type="number" min="18" max="45" step="1" placeholder="Min" />
-              <input id="screen-age-max" type="number" min="18" max="45" step="1" placeholder="Max" />
+          <div class="lab-runbar">
+            <div class="filter-actions">
+              <button id="screen-run" class="primary-btn" type="button">Run Screen</button>
+              <button id="screen-refresh-db" class="secondary-btn" type="button">Refresh Live DB</button>
+              <button id="screen-toggle-applied" class="secondary-btn" type="button">Applied Filters (0)</button>
             </div>
-          </label>
+            <p id="screen-status" class="status" data-level="info">Ready. Run a screen to load results.</p>
+          </div>
+        </article>
 
-          <label>
-            PPR Range
-            <div class="age-range-inputs">
-              <input id="screen-ppr-min" type="number" step="0.1" placeholder="Min PPR" />
-              <input id="screen-ppr-max" type="number" step="0.1" placeholder="Max PPR" />
-            </div>
-          </label>
-        </div>
-
-        <div class="quick-metric-panel">
+        <article class="active-filters-panel lab-card">
           <div class="active-filters-head">
-            <h3>Quick Numeric Filters (All Metrics)</h3>
-            <p class="hint">Type min/max for any metric and it applies to the screen query.</p>
+            <h3>Active Criteria</h3>
+            <button id="screen-clear-filters" class="secondary-btn" type="button">Clear</button>
           </div>
-          <div class="quick-mode-toggle" id="screen-quick-mode-toggle" role="group" aria-label="Quick filter mode">
-            <button type="button" class="quick-mode-btn active" data-mode="top">Top Metrics</button>
-            <button type="button" class="quick-mode-btn" data-mode="all">All Matching</button>
-            <button type="button" class="quick-mode-btn" data-mode="active">Only Active</button>
-          </div>
-          <label>
-            Find metric input
-            <input id="screen-quick-filter-search" placeholder="Type metric name or key..." />
-          </label>
-          <div id="screen-quick-metric-inputs" class="quick-metric-inputs"></div>
-        </div>
-      </section>
+          <div id="screen-active-filters" class="active-filters"></div>
+        </article>
 
-      <div class="hand-divider" aria-hidden="true"></div>
-
-      <section class="panel data-panel">
-        <div class="lab-section-head">
-          <h2>Column Picker + Metric Filters</h2>
-          <button id="screen-reset-columns" class="secondary-btn" type="button">Reset Columns</button>
-        </div>
-        <div class="active-columns-panel data-panel">
+        <article id="screen-applied-panel" class="lab-card applied-filters-panel hidden">
           <div class="active-filters-head">
-            <h3>Active Columns</h3>
-            <p class="hint">Drag chips to reorder. Remove what you do not need.</p>
+            <h3>Applied Filter Summary</h3>
+            <p id="screen-applied-summary" class="hint">0 filters</p>
           </div>
-          <div id="screen-active-columns" class="active-columns"></div>
-        </div>
+          <div id="screen-applied-list" class="applied-filters-list"></div>
+        </article>
 
-        <div class="screener-builder">
-          <div class="metric-catalog-panel">
-            <label>
-              Find Metric
-              <input id="metric-search" placeholder="Type: age, yac, air yards..." />
-            </label>
-            <div id="screen-metric-categories" class="metric-categories" aria-label="Metric categories"></div>
-            <label>
-              Available Metrics
-              <select id="metric-select" class="metric-select" size="14" aria-label="Available metrics"></select>
-            </label>
-            <div class="metric-select-actions">
-              <button id="screen-add-column" class="secondary-btn" type="button">Add as Column</button>
-              <button id="screen-add-metric" class="secondary-btn" type="button">Add as Filter</button>
-            </div>
-            <label>
-              Custom Metric Key
-              <input id="screen-custom-metric" placeholder="Example: receiving_yards_after_catch" />
-            </label>
-            <div class="metric-select-actions">
-              <button id="screen-add-custom-column" class="secondary-btn" type="button">Custom Column</button>
-              <button id="screen-add-custom-metric" class="secondary-btn" type="button">Custom Filter</button>
-            </div>
+        <details class="lab-advanced">
+          <summary>Advanced Screener Builder</summary>
+          <div class="lab-advanced-grid">
+            <article class="quick-metric-panel lab-card">
+              <div class="active-filters-head">
+                <h3>Quick Numeric Filters</h3>
+                <p class="hint">Set min/max filters fast across any metric.</p>
+              </div>
+              <div class="quick-mode-toggle" id="screen-quick-mode-toggle" role="group" aria-label="Quick filter mode">
+                <button type="button" class="quick-mode-btn active" data-mode="top">Top Metrics</button>
+                <button type="button" class="quick-mode-btn" data-mode="all">All Matching</button>
+                <button type="button" class="quick-mode-btn" data-mode="active">Only Active</button>
+              </div>
+              <label>
+                Find metric input
+                <input id="screen-quick-filter-search" placeholder="Type metric name or key..." />
+              </label>
+              <div id="screen-quick-metric-inputs" class="quick-metric-inputs"></div>
+            </article>
+
+            <article class="metric-catalog-panel lab-card">
+              <div class="lab-card-head">
+                <h3>Metric Library</h3>
+              </div>
+              <label>
+                Find Metric
+                <input id="metric-search" placeholder="Type: age, yac, air yards..." />
+              </label>
+              <div id="screen-metric-categories" class="metric-categories" aria-label="Metric categories"></div>
+              <label>
+                Available Metrics
+                <select id="metric-select" class="metric-select" size="14" aria-label="Available metrics"></select>
+              </label>
+              <div class="metric-select-actions">
+                <button id="screen-add-column" class="secondary-btn" type="button">Add as Column</button>
+                <button id="screen-add-metric" class="secondary-btn" type="button">Add as Filter</button>
+              </div>
+              <label>
+                Custom Metric Key
+                <input id="screen-custom-metric" placeholder="Example: receiving_yards_after_catch" />
+              </label>
+              <div class="metric-select-actions">
+                <button id="screen-add-custom-column" class="secondary-btn" type="button">Custom Column</button>
+                <button id="screen-add-custom-metric" class="secondary-btn" type="button">Custom Filter</button>
+              </div>
+            </article>
+
+            <article class="active-columns-panel data-panel lab-card">
+              <div class="lab-section-head">
+                <div class="active-filters-head">
+                  <h3>Output Columns</h3>
+                  <p class="hint">Drag to reorder and trim noise.</p>
+                </div>
+                <button id="screen-reset-columns" class="secondary-btn" type="button">Reset Columns</button>
+              </div>
+              <div id="screen-active-columns" class="active-columns"></div>
+            </article>
+
+            <article class="saved-views-panel lab-card">
+              <div class="active-filters-head">
+                <h3>Saved Screens</h3>
+                <button id="screen-clear-saved-views" class="secondary-btn" type="button">Clear Saved</button>
+              </div>
+              <div id="screen-saved-views" class="saved-views"></div>
+            </article>
           </div>
-          <div class="active-filters-panel">
-            <div class="active-filters-head">
-              <h3>Active Metric Filters</h3>
-              <button id="screen-clear-filters" class="secondary-btn" type="button">Clear</button>
-            </div>
-            <div id="screen-active-filters" class="active-filters"></div>
+        </details>
+
+        <article class="data-panel lab-card lab-results-card">
+          <div class="results-head">
+            <h2>Results</h2>
+            <p id="screen-sort" class="hint">Sorted by Fantasy Points PPR (desc)</p>
           </div>
-        </div>
-
-        <div class="saved-views-panel data-panel">
-          <div class="active-filters-head">
-            <h3>Saved Views</h3>
-            <button id="screen-clear-saved-views" class="secondary-btn" type="button">Clear Saved</button>
+          <p id="screen-count" class="hint">0 players</p>
+          <div class="table-wrap lab-table-wrap">
+            <table class="screener-table">
+              <thead id="screen-results-head"></thead>
+              <tbody id="screen-results"></tbody>
+            </table>
           </div>
-          <div id="screen-saved-views" class="saved-views"></div>
-        </div>
-
-        <div class="filter-actions">
-          <button id="screen-run" class="primary-btn" type="button">Run Screen</button>
-          <button id="screen-refresh-db" class="secondary-btn" type="button">Refresh Live DB</button>
-        </div>
-        <p id="screen-status" class="status" data-level="info">Ready. Run a screen to load results.</p>
-      </section>
-
-      <div class="hand-divider" aria-hidden="true"></div>
-
-      <section class="panel data-panel">
-        <div class="results-head">
-          <h2>Results</h2>
-          <p id="screen-sort" class="hint">Sorted by Fantasy Points PPR (desc)</p>
-        </div>
-        <p id="screen-count" class="hint">0 players</p>
-        <div class="table-wrap lab-table-wrap">
-          <table class="screener-table">
-            <thead id="screen-results-head"></thead>
-            <tbody id="screen-results"></tbody>
-          </table>
-        </div>
-        <p class="brand-watermark">fourthdownlabs.com</p>
+          <p class="brand-watermark">fourthdownlabs.com</p>
+        </article>
       </section>
     </main>
 
