@@ -79,9 +79,12 @@ const METRIC_CATEGORIES = [
 ];
 
 const POSITION_ORDER = ["QB", "RB", "WR", "TE", "K", "PICK"];
-const FILTER_AUTO_RUN_DEBOUNCE_MS = 200;
+const FILTER_AUTO_RUN_DEBOUNCE_MS = 350;
+const INITIAL_SCREEN_LIMIT = 140;
+const DEFAULT_SCREEN_LIMIT = 300;
 
 let autoRunDebounceTimer = null;
+let activeScreenRequestController = null;
 
 const dom = {
   search: document.querySelector("#screen-search"),
@@ -128,6 +131,7 @@ const state = {
   expandedPlayerIds: new Set(),
   lastItems: [],
   draggingColumnKey: "",
+  hasRunOnce: false,
   showAppliedFilters: false
 };
 
@@ -165,7 +169,9 @@ async function initialize() {
   renderSavedViews();
   updateSortLabel();
 
-  await runScreen();
+  setTimeout(() => {
+    runScreen({ initialLoad: true });
+  }, 0);
 
   if (sharedView) {
     setStatus("Shared Lab view loaded.", "success");
@@ -342,10 +348,10 @@ function formatMetricFilterPhrase(label, filter) {
 
 async function loadTeamOptions() {
   try {
-    const response = await fetch("/api/players?limit=5000&sort=name");
+    const response = await fetch("/api/teams");
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const payload = await response.json();
-    const teams = [...new Set((payload.items || []).map((item) => item.team).filter(Boolean))].sort();
+    const teams = (payload.items || []).filter(Boolean);
     dom.team.innerHTML =
       `<option value="">All Teams</option>` +
       teams.map((team) => `<option value="${escapeHtml(team)}">${escapeHtml(team)}</option>`).join("");
@@ -856,11 +862,16 @@ function buildFiltersPayload() {
   return filters;
 }
 
-async function runScreen() {
+async function runScreen(options = {}) {
   try {
-    setStatus("Running screen...", "info");
+    const initialLoad = options && options.initialLoad === true;
+    setStatus(initialLoad ? "Loading initial screen..." : "Running screen...", "info");
     dom.runBtn.disabled = true;
     state.expandedPlayerIds.clear();
+    if (activeScreenRequestController) {
+      activeScreenRequestController.abort();
+    }
+    activeScreenRequestController = new AbortController();
 
     const filters = buildFiltersPayload();
     const selectedPositions = [...state.selectedPositions];
@@ -871,7 +882,7 @@ async function runScreen() {
       search: dom.search.value,
       team: dom.team.value,
       positions: selectedPositions,
-      limit: 400,
+      limit: state.hasRunOnce ? DEFAULT_SCREEN_LIMIT : INITIAL_SCREEN_LIMIT,
       offset: 0,
       sort_key: sortIsBuiltin ? "fantasy_points_ppr" : state.sortKey,
       sort_direction: state.sortDirection,
@@ -879,7 +890,7 @@ async function runScreen() {
       columns: metricColumns
     };
 
-    const payload = await postScreenerQuery(request);
+    const payload = await postScreenerQuery(request, activeScreenRequestController.signal);
     const items = payload.items || [];
     state.lastItems = items;
 
@@ -889,6 +900,7 @@ async function runScreen() {
     updateSortLabel();
     persistLastView();
     publishLabContext(sortedItems, filters);
+    state.hasRunOnce = true;
 
     setStatus(
       `Screen complete. ${sortedItems.length} players · ${filters.length} metric filter${
@@ -897,6 +909,9 @@ async function runScreen() {
       "success"
     );
   } catch (error) {
+    if (error?.name === "AbortError") {
+      return;
+    }
     setStatus(`Screen failed: ${error.message}. Make sure you started: python3 terminal_server.py`, "error");
   } finally {
     dom.runBtn.disabled = false;
@@ -926,7 +941,7 @@ function publishLabContext(sortedItems, filters) {
   });
 }
 
-async function postScreenerQuery(request) {
+async function postScreenerQuery(request, signal) {
   const endpoints = ["/api/v2/screener/query", "/api/screener/query"];
   const failures = [];
 
@@ -936,7 +951,8 @@ async function postScreenerQuery(request) {
       response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(request)
+        body: JSON.stringify(request),
+        signal
       });
     } catch (error) {
       failures.push(`${endpoint} network error (${error.message})`);

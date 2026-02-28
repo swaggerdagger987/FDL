@@ -36,6 +36,9 @@ NFL_REGULAR_SEASON_WEEKS = 18
 MAX_SCREEN_FILTERS = 24
 DB_SCHEMA_LOCK = threading.Lock()
 SLEEPER_CACHE_LOCK = threading.Lock()
+FILTER_OPTIONS_CACHE_LOCK = threading.Lock()
+FILTER_OPTIONS_CACHE = {"stamp": None, "entries": {}}
+FILTER_OPTIONS_CACHE_MAX_ENTRIES = 32
 
 SLEEPER_METRIC_ALIASES = {
     "pts_ppr": "fantasy_points_ppr",
@@ -1318,7 +1321,20 @@ def fetch_filter_options(connection, query):
     search = str(query.get("search") or "").strip().lower()
     position = str(query.get("position") or "").strip().upper()
     team = str(query.get("team") or "").strip().upper()
-    limit = max(1, min(parse_int(query.get("limit"), 600), 3000))
+    limit = max(1, min(parse_int(query.get("limit"), 600), 12000))
+
+    sync_state = read_sync_state(connection, "last_sync_report")
+    cache_stamp = str(sync_state.get("updated_at") or "no_sync")
+    cache_key = f"{search}|{position}|{team}|{limit}"
+
+    with FILTER_OPTIONS_CACHE_LOCK:
+        if FILTER_OPTIONS_CACHE.get("stamp") == cache_stamp:
+            cached = FILTER_OPTIONS_CACHE["entries"].get(cache_key)
+            if cached is not None:
+                return cached
+        else:
+            FILTER_OPTIONS_CACHE["stamp"] = cache_stamp
+            FILTER_OPTIONS_CACHE["entries"] = {}
 
     sql = """
       SELECT
@@ -1327,27 +1343,30 @@ def fetch_filter_options(connection, query):
         MIN(plm.stat_value) AS min_value,
         MAX(plm.stat_value) AS max_value
       FROM player_latest_metrics plm
-      JOIN players p ON p.player_id = plm.player_id
-      WHERE 1=1
     """
     params = []
+    where_parts = ["1=1"]
+
+    if position or team:
+        sql += " JOIN players p ON p.player_id = plm.player_id"
 
     if search:
         token = normalize_stat_key(search)
         wildcard = f"%{token.replace('_', '%') if token else search}%"
         if token == "yac":
-            sql += " AND (plm.stat_key LIKE ? OR plm.stat_key LIKE ?)"
+            where_parts.append("(plm.stat_key LIKE ? OR plm.stat_key LIKE ?)")
             params.extend(["%yac%", "%yards_after_catch%"])
         else:
-            sql += " AND plm.stat_key LIKE ?"
+            where_parts.append("plm.stat_key LIKE ?")
             params.append(wildcard)
     if position:
-        sql += " AND p.position = ?"
+        where_parts.append("p.position = ?")
         params.append(position)
     if team:
-        sql += " AND p.team = ?"
+        where_parts.append("p.team = ?")
         params.append(team)
 
+    sql += f" WHERE {' AND '.join(where_parts)}"
     sql += """
       GROUP BY plm.stat_key
       ORDER BY
@@ -1374,7 +1393,28 @@ def fetch_filter_options(connection, query):
                 "player_count": row["player_count"],
             }
         )
+
+    with FILTER_OPTIONS_CACHE_LOCK:
+        entries = FILTER_OPTIONS_CACHE["entries"]
+        entries[cache_key] = items
+        if len(entries) > FILTER_OPTIONS_CACHE_MAX_ENTRIES:
+            oldest_key = next(iter(entries))
+            if oldest_key != cache_key:
+                entries.pop(oldest_key, None)
     return items
+
+
+def fetch_teams(connection):
+    initialize_database(connection)
+    rows = connection.execute(
+        """
+        SELECT DISTINCT team
+        FROM players
+        WHERE team IS NOT NULL AND team != ''
+        ORDER BY team ASC
+        """
+    ).fetchall()
+    return [row["team"] for row in rows if row["team"]]
 
 
 def fetch_screener_query(connection, payload):

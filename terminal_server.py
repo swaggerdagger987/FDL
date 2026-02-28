@@ -254,6 +254,11 @@ class TerminalRequestHandler(SimpleHTTPRequestHandler):
                     self.send_json(200, {"count": len(items), "items": items})
                     return
 
+                if parsed.path == "/api/teams" and method == "GET":
+                    teams = live_data.fetch_teams(connection)
+                    self.send_json(200, {"count": len(teams), "items": teams})
+                    return
+
                 if parsed.path == "/api/players" and method == "GET":
                     items = live_data.fetch_players(
                         connection,
