@@ -85,6 +85,8 @@ const DEFAULT_SCREEN_LIMIT = 300;
 
 let autoRunDebounceTimer = null;
 let activeScreenRequestController = null;
+const customScrollbarRegistry = new WeakMap();
+let scrollbarRefreshFrame = null;
 
 const dom = {
   search: document.querySelector("#screen-search"),
@@ -168,6 +170,7 @@ async function initialize() {
   renderAppliedFiltersSummary();
   renderSavedViews();
   updateSortLabel();
+  setupCustomScrollbars();
 
   setTimeout(() => {
     runScreen({ initialLoad: true });
@@ -258,6 +261,7 @@ function renderAppliedFiltersSummary() {
 
   if (!applied.length) {
     dom.appliedList.innerHTML = `<p class="chip-empty">No filters are currently applied.</p>`;
+    scheduleCustomScrollbarRefresh();
     return;
   }
 
@@ -271,6 +275,7 @@ function renderAppliedFiltersSummary() {
     `
     )
     .join("");
+  scheduleCustomScrollbarRefresh();
 }
 
 function collectAppliedFilters() {
@@ -798,6 +803,7 @@ function renderActiveFilters() {
       `;
     })
     .join("");
+  scheduleCustomScrollbarRefresh();
 }
 
 function onActiveFilterClick(event) {
@@ -1096,6 +1102,7 @@ function renderResults(items) {
       return `${row}${renderDetailRow(item, columns.length)}`;
     })
     .join("");
+  scheduleCustomScrollbarRefresh();
 }
 
 function renderHeaderCell(columnKey, sticky) {
@@ -1478,6 +1485,7 @@ function onSavedViewsClick(event) {
 function renderSavedViews() {
   if (!state.savedViews.length) {
     dom.savedViews.innerHTML = `<p class="saved-view-empty">No saved views yet.</p>`;
+    scheduleCustomScrollbarRefresh();
     return;
   }
 
@@ -1495,6 +1503,7 @@ function renderSavedViews() {
       `;
     })
     .join("");
+  scheduleCustomScrollbarRefresh();
 }
 
 function getCurrentViewConfig() {
@@ -1686,6 +1695,90 @@ function base64UrlDecode(value) {
   const binary = atob(padded);
   const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
   return new TextDecoder().decode(bytes);
+}
+
+function setupCustomScrollbars() {
+  const hosts = document.querySelectorAll(".table-wrap, .lab-table-wrap, .active-filters, .saved-views, .applied-filters-list");
+  hosts.forEach((host) => attachCustomScrollbar(host));
+  scheduleCustomScrollbarRefresh();
+  window.addEventListener("resize", scheduleCustomScrollbarRefresh, { passive: true });
+}
+
+function attachCustomScrollbar(host) {
+  if (!host || customScrollbarRegistry.has(host)) return;
+  host.classList.add("fdl-scroll-host");
+  const rail = document.createElement("div");
+  rail.className = "fdl-scroll-rail";
+  const thumb = document.createElement("div");
+  thumb.className = "fdl-scroll-thumb";
+  rail.appendChild(thumb);
+  host.appendChild(rail);
+
+  const stateRef = {
+    rail,
+    thumb,
+    dragging: false,
+    dragStartY: 0,
+    dragStartScrollTop: 0
+  };
+
+  const onScroll = () => updateCustomScrollbar(host);
+  const onPointerDown = (event) => {
+    stateRef.dragging = true;
+    stateRef.dragStartY = event.clientY;
+    stateRef.dragStartScrollTop = host.scrollTop;
+    thumb.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  };
+  const onPointerMove = (event) => {
+    if (!stateRef.dragging) return;
+    const track = rail.clientHeight - thumb.clientHeight;
+    if (track <= 0) return;
+    const delta = event.clientY - stateRef.dragStartY;
+    const maxScroll = host.scrollHeight - host.clientHeight;
+    host.scrollTop = stateRef.dragStartScrollTop + (delta / track) * maxScroll;
+  };
+  const onPointerUp = () => {
+    stateRef.dragging = false;
+  };
+
+  host.addEventListener("scroll", onScroll, { passive: true });
+  thumb.addEventListener("pointerdown", onPointerDown);
+  thumb.addEventListener("pointermove", onPointerMove);
+  thumb.addEventListener("pointerup", onPointerUp);
+  thumb.addEventListener("pointercancel", onPointerUp);
+
+  customScrollbarRegistry.set(host, stateRef);
+}
+
+function scheduleCustomScrollbarRefresh() {
+  if (scrollbarRefreshFrame !== null) {
+    cancelAnimationFrame(scrollbarRefreshFrame);
+  }
+  scrollbarRefreshFrame = requestAnimationFrame(() => {
+    scrollbarRefreshFrame = null;
+    const hosts = document.querySelectorAll(".fdl-scroll-host");
+    hosts.forEach((host) => updateCustomScrollbar(host));
+  });
+}
+
+function updateCustomScrollbar(host) {
+  const ref = customScrollbarRegistry.get(host);
+  if (!ref) return;
+  const { rail, thumb } = ref;
+  const scrollHeight = host.scrollHeight;
+  const clientHeight = host.clientHeight;
+  const maxScroll = scrollHeight - clientHeight;
+  if (maxScroll <= 2) {
+    rail.classList.add("hidden");
+    return;
+  }
+  rail.classList.remove("hidden");
+  const trackHeight = rail.clientHeight;
+  const thumbHeight = Math.max(32, Math.round((clientHeight / scrollHeight) * trackHeight));
+  const top = Math.round((host.scrollTop / maxScroll) * (trackHeight - thumbHeight));
+  thumb.style.height = `${thumbHeight}px`;
+  thumb.style.transform = `translateY(${Math.max(0, top)}px)`;
 }
 
 function categorizeMetricKey(key) {
