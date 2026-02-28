@@ -67,11 +67,13 @@ const DEFAULT_COLUMNS = [
 
 const METRIC_CATEGORIES = [
   { key: "all", label: "All" },
-  { key: "universal", label: "Universal" },
-  { key: "qb", label: "QB Lens" },
-  { key: "rb", label: "RB Lens" },
-  { key: "wr", label: "WR Lens" },
-  { key: "te", label: "TE Lens" },
+  { key: "basics", label: "Basics" },
+  { key: "passing", label: "Passing" },
+  { key: "rushing", label: "Rushing" },
+  { key: "receiving", label: "Receiving" },
+  { key: "usage", label: "Usage" },
+  { key: "efficiency", label: "Efficiency" },
+  { key: "fantasy", label: "Fantasy" },
   { key: "context", label: "Context" },
   { key: "value", label: "Value" }
 ];
@@ -182,6 +184,11 @@ function wireEvents() {
 
   dom.metricSearch.addEventListener("input", renderMetricOptions);
   dom.metricSelect.addEventListener("dblclick", addSelectedAsColumn);
+  dom.metricSelect.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    addSelectedAsFilter();
+  });
   dom.addColumnBtn.addEventListener("click", addSelectedAsColumn);
   dom.addMetricBtn.addEventListener("click", addSelectedAsFilter);
 
@@ -498,21 +505,14 @@ function renderMetricCategories() {
 }
 
 function countMetricsByCategory() {
-  const counts = {
-    universal: 0,
-    qb: 0,
-    rb: 0,
-    wr: 0,
-    te: 0,
-    context: 0,
-    value: 0
-  };
+  const counts = Object.fromEntries(METRIC_CATEGORIES.map((item) => [item.key, 0]));
+  delete counts.all;
   for (const item of state.metricOptions) {
     const category = item.category;
     if (counts[category] !== undefined) {
       counts[category] += 1;
     } else {
-      counts.universal += 1;
+      counts.basics += 1;
     }
   }
   return counts;
@@ -547,19 +547,31 @@ function renderMetricOptions() {
       )}) | ${escapeHtml(range)}${escapeHtml(suffix)}</option>`;
     })
     .join("");
+
+  if (!currentValue || !filtered.some((item) => item.key === currentValue)) {
+    dom.metricSelect.selectedIndex = 0;
+  }
 }
 
 
 function addSelectedAsColumn() {
-  const key = String(dom.metricSelect.value || "").trim();
+  const key = String(getSelectedMetricKey()).trim();
   if (!key) return;
   addColumn(key);
 }
 
 function addSelectedAsFilter() {
-  const key = String(dom.metricSelect.value || "").trim();
+  const key = String(getSelectedMetricKey()).trim();
   if (!key) return;
   addFilter(key);
+}
+
+function getSelectedMetricKey() {
+  if (!dom.metricSelect) return "";
+  const directValue = String(dom.metricSelect.value || "").trim();
+  if (directValue) return directValue;
+  const option = dom.metricSelect.options?.[dom.metricSelect.selectedIndex];
+  return String(option?.value || "").trim();
 }
 
 function ensureDefaultColumns() {
@@ -1628,7 +1640,7 @@ function base64UrlDecode(value) {
 
 function categorizeMetricKey(key) {
   const token = String(key || "").toLowerCase();
-  if (!token) return "universal";
+  if (!token) return "basics";
 
   if (
     [
@@ -1657,35 +1669,14 @@ function categorizeMetricKey(key) {
     return "value";
   }
 
-  if (
-    ["passing", "pass_", "qb", "completion", "interception", "sack", "air_yards", "cpoe"].some((part) =>
-      token.includes(part)
-    )
-  ) {
-    return "qb";
-  }
-
-  if (
-    ["rushing", "rush_", "carry", "goal_line", "yards_after_contact", "broken_tackle"].some((part) =>
-      token.includes(part)
-    )
-  ) {
-    return "rb";
-  }
-
-  if (["tight_end", "te_", "_te", "te_target"].some((part) => token.includes(part))) {
-    return "te";
-  }
-
-  if (
-    ["receiving", "target", "reception", "wopr", "yac", "yards_per_route_run", "air_yards_share"].some((part) =>
-      token.includes(part)
-    )
-  ) {
-    return "wr";
-  }
-
-  return "universal";
+  if (["fantasy_points", "_ppr", "_std", "_half_ppr", "points"].some((part) => token.includes(part))) return "fantasy";
+  if (["passing", "pass_", "completion", "interception", "sack", "cpoe", "qbr", "air_yards"].some((part) => token.includes(part))) return "passing";
+  if (["rushing", "rush_", "carry", "goal_line", "yards_after_contact", "broken_tackle"].some((part) => token.includes(part))) return "rushing";
+  if (["receiving", "target", "reception", "wopr", "yac", "yards_per_route_run", "air_yards_share"].some((part) => token.includes(part))) return "receiving";
+  if (["snap", "share", "route", "attempts", "opportunity", "red_zone", "inside_10", "inside_5"].some((part) => token.includes(part))) return "usage";
+  if (["per_", "rate", "pct", "percentage", "efficiency", "epa", "success", "adot", "yac_over_expected"].some((part) => token.includes(part))) return "efficiency";
+  if (["age", "years_exp", "games", "starts", "height", "weight"].some((part) => token.includes(part))) return "basics";
+  return "basics";
 }
 
 function operatorOptionsMarkup(selected) {
