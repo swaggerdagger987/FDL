@@ -43,7 +43,8 @@ const FALLBACK_METRIC_KEYS = [
 
 const STORAGE_KEYS = {
   savedViews: "fdl_saved_lab_views_v2",
-  lastView: "fdl_last_lab_view_v2"
+  lastView: "fdl_last_lab_view_v2",
+  metricCatalog: "fdl_metric_catalog_v1"
 };
 
 const BUILTIN_COLUMNS = [
@@ -350,35 +351,35 @@ async function loadTeamOptions() {
 }
 
 async function loadMetricOptions() {
+  const cached = readCachedMetricCatalog();
+  if (cached.length) {
+    applyMetricOptions(cached);
+  }
+
   try {
-    const response = await fetch("/api/filter-options?limit=3000");
+    const response = await fetch("/api/filter-options?limit=12000");
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const payload = await response.json();
     const items = (payload.items || []).filter((item) => item && item.key);
     if (!items.length) {
-      applyFallbackMetricOptions();
+      if (!cached.length) {
+        applyFallbackMetricOptions();
+      }
       setStatus("Metric catalog is empty. Run Refresh Live DB to populate all stats.", "info");
       return;
     }
-
-    state.metricOptions = items.map((item) => {
-      const key = String(item.key);
-      return {
-        key,
-        label: String(item.label || item.key),
-        minValue: Number(item.min_value),
-        maxValue: Number(item.max_value),
-        playerCount: Number(item.player_count || 0),
-        category: categorizeMetricKey(key)
-      };
-    });
-    state.metricIndex = new Map(state.metricOptions.map((item) => [item.key, item]));
+    applyMetricOptions(items);
+    persistMetricCatalog(items);
   } catch (error) {
-    applyFallbackMetricOptions();
-    setStatus(
-      `Live metric catalog unavailable (${error.message}). Using fallback list; API calls require terminal_server.py.`,
-      "error"
-    );
+    if (!cached.length) {
+      applyFallbackMetricOptions();
+      setStatus(
+        `Live metric catalog unavailable (${error.message}). Using fallback list; API calls require terminal_server.py.`,
+        "error"
+      );
+      return;
+    }
+    setStatus(`Using cached metric catalog. Live refresh failed (${error.message}).`, "info");
   }
 }
 
@@ -392,6 +393,41 @@ function applyFallbackMetricOptions() {
     category: categorizeMetricKey(key)
   }));
   state.metricIndex = new Map(state.metricOptions.map((item) => [item.key, item]));
+}
+
+function applyMetricOptions(items) {
+  state.metricOptions = items.map((item) => {
+    const key = String(item.key);
+    return {
+      key,
+      label: String(item.label || item.key),
+      minValue: Number(item.min_value),
+      maxValue: Number(item.max_value),
+      playerCount: Number(item.player_count || 0),
+      category: categorizeMetricKey(key)
+    };
+  });
+  state.metricIndex = new Map(state.metricOptions.map((item) => [item.key, item]));
+}
+
+function readCachedMetricCatalog() {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEYS.metricCatalog);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item) => item && item.key);
+  } catch (error) {
+    return [];
+  }
+}
+
+function persistMetricCatalog(items) {
+  try {
+    window.localStorage.setItem(STORAGE_KEYS.metricCatalog, JSON.stringify(items));
+  } catch (error) {
+    // Ignore storage write failures.
+  }
 }
 
 function onPositionPillClick(event) {
@@ -513,137 +549,6 @@ function renderMetricOptions() {
     .join("");
 }
 
-function onQuickModeClick(event) {
-  const button = event.target.closest("button.quick-mode-btn[data-mode]");
-  if (!button) return;
-  const mode = String(button.dataset.mode || "").trim();
-  if (mode !== "top" && mode !== "all" && mode !== "active") return;
-  if (state.quickMetricMode === mode) return;
-  state.quickMetricMode = mode;
-  renderQuickModeToggle();
-  renderQuickMetricInputs();
-}
-
-function renderQuickModeToggle() {
-  if (!dom.quickModeToggle) return;
-  dom.quickModeToggle.querySelectorAll("button.quick-mode-btn[data-mode]").forEach((button) => {
-    const mode = String(button.dataset.mode || "").trim();
-    button.classList.toggle("active", mode === state.quickMetricMode);
-  });
-}
-
-function getDefaultQuickMetricKeys() {
-  return [
-    "fantasy_points_half_ppr",
-    "fantasy_points_std",
-    "receiving_yards",
-    "receiving_targets",
-    "receptions",
-    "receiving_tds",
-    "rushing_yards",
-    "rushing_attempts",
-    "rushing_tds",
-    "passing_yards",
-    "passing_tds",
-    "interceptions",
-    "air_yards_share",
-    "target_share",
-    "yards_per_route_run",
-    "yards_per_target",
-    "yards_per_rush_attempt",
-    "red_zone_targets",
-    "goal_line_carries",
-    "wopr",
-    "touchdowns",
-    "turnovers",
-    "snap_pct"
-  ];
-}
-
-function getVisibleQuickMetrics() {
-  const query = String(dom.quickFilterSearch?.value || "").trim().toLowerCase();
-  const allOptions = state.metricOptions.filter((item) => item && item.key && item.key !== "fantasy_points_ppr");
-  const showAll = state.quickMetricMode === "all";
-  const showOnlyActive = state.quickMetricMode === "active";
-  if (showOnlyActive) {
-    const activeKeys = new Set(
-      Object.entries(state.quickMetricRanges || {})
-        .filter(([, range]) => String(range?.min || "").trim() || String(range?.max || "").trim())
-        .map(([key]) => key)
-    );
-    return allOptions
-      .filter((item) => activeKeys.has(item.key))
-      .filter((item) => !query || item.key.toLowerCase().includes(query) || item.label.toLowerCase().includes(query))
-      .slice(0, 240);
-  }
-
-  if (query || showAll) {
-    return allOptions
-      .filter((item) => item.key.toLowerCase().includes(query) || item.label.toLowerCase().includes(query))
-      .slice(0, 240);
-  }
-
-  const defaults = new Set(getDefaultQuickMetricKeys());
-  const byKey = new Map(allOptions.map((item) => [item.key, item]));
-  const seeded = [];
-  for (const key of defaults) {
-    const item = byKey.get(key);
-    if (item) seeded.push(item);
-  }
-  return seeded;
-}
-
-function renderQuickMetricInputs() {
-  if (!dom.quickMetricInputs) return;
-  const items = getVisibleQuickMetrics();
-  if (!items.length) {
-    dom.quickMetricInputs.innerHTML = `<p class="chip-empty">No metrics found. Type in search to reveal inputs.</p>`;
-    return;
-  }
-
-  dom.quickMetricInputs.innerHTML = items
-    .map((item) => {
-      const current = state.quickMetricRanges[item.key] || { min: "", max: "" };
-      return `
-        <div class="quick-metric-row" data-key="${escapeHtml(item.key)}">
-          <div class="quick-metric-copy">
-            <p class="quick-metric-title">${escapeHtml(item.label)}</p>
-            <p class="quick-metric-meta">${escapeHtml(item.key)}</p>
-          </div>
-          <div class="quick-metric-controls">
-            <input data-field="min" type="number" step="0.01" placeholder="Min" value="${escapeHtml(String(current.min || ""))}" />
-            <input data-field="max" type="number" step="0.01" placeholder="Max" value="${escapeHtml(String(current.max || ""))}" />
-          </div>
-        </div>
-      `;
-    })
-    .join("");
-}
-
-function onQuickMetricInput(event) {
-  const row = event.target.closest(".quick-metric-row");
-  if (!row) return;
-  const key = String(row.dataset.key || "").trim();
-  if (!key) return;
-
-  const field = String(event.target.dataset.field || "");
-  if (field !== "min" && field !== "max") return;
-
-  const current = state.quickMetricRanges[key] || { min: "", max: "" };
-  if (field === "min") {
-    current.min = event.target.value;
-  } else {
-    current.max = event.target.value;
-  }
-
-  if (String(current.min || "").trim() === "" && String(current.max || "").trim() === "") {
-    delete state.quickMetricRanges[key];
-  } else {
-    state.quickMetricRanges[key] = current;
-  }
-
-  scheduleRunScreen();
-}
 
 function addSelectedAsColumn() {
   const key = String(dom.metricSelect.value || "").trim();
@@ -655,20 +560,6 @@ function addSelectedAsFilter() {
   const key = String(dom.metricSelect.value || "").trim();
   if (!key) return;
   addFilter(key);
-}
-
-function addCustomColumn() {
-  const key = normalizeMetricKey(dom.customMetric.value);
-  if (!key) return;
-  addColumn(key);
-  dom.customMetric.value = "";
-}
-
-function addCustomFilter() {
-  const key = normalizeMetricKey(dom.customMetric.value);
-  if (!key) return;
-  addFilter(key);
-  dom.customMetric.value = "";
 }
 
 function ensureDefaultColumns() {
@@ -951,38 +842,6 @@ function buildFiltersPayload() {
     filters.push({ key, op, value });
   }
   return filters;
-}
-
-function buildQuickMetricFilters() {
-  const output = [];
-  for (const [key, range] of Object.entries(state.quickMetricRanges || {})) {
-    const normalizedKey = normalizeMetricKey(key);
-    if (!normalizedKey || normalizedKey === "fantasy_points_ppr") continue;
-    const quickFilter = buildQuickRangeFilter(normalizedKey, range?.min, range?.max);
-    if (!quickFilter) continue;
-    output.push(quickFilter);
-  }
-  return output;
-}
-
-function buildQuickRangeFilter(key, minRaw, maxRaw) {
-  const min = toNumberOrNull(minRaw);
-  const max = toNumberOrNull(maxRaw);
-  if (min === null && max === null) {
-    return null;
-  }
-  if (min !== null && max !== null) {
-    return {
-      key,
-      op: "between",
-      value: Math.min(min, max),
-      value_max: Math.max(min, max)
-    };
-  }
-  if (min !== null) {
-    return { key, op: "gte", value: min };
-  }
-  return { key, op: "lte", value: max };
 }
 
 async function runScreen() {
@@ -1403,8 +1262,6 @@ async function refreshDatabase() {
     await Promise.all([loadTeamOptions(), loadMetricOptions()]);
     renderMetricCategories();
     renderMetricOptions();
-    renderQuickModeToggle();
-    renderQuickMetricInputs();
     renderActiveColumns();
     renderActiveFilters();
     await runScreen();
@@ -1444,8 +1301,6 @@ async function waitForSyncToFinish() {
     await Promise.all([loadTeamOptions(), loadMetricOptions()]);
     renderMetricCategories();
     renderMetricOptions();
-    renderQuickModeToggle();
-    renderQuickMetricInputs();
     renderActiveColumns();
     renderActiveFilters();
     await runScreen();
