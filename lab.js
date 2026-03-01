@@ -91,6 +91,11 @@ let scrollbarRefreshFrame = null;
 const dom = {
   search: document.querySelector("#screen-search"),
   team: document.querySelector("#screen-team"),
+  statMode: document.querySelector("#screen-stat-mode"),
+  statSeason: document.querySelector("#screen-stat-season"),
+  statWeekStart: document.querySelector("#screen-stat-week-start"),
+  statWeekEnd: document.querySelector("#screen-stat-week-end"),
+  statLastN: document.querySelector("#screen-stat-last-n"),
   openAdvancedBtn: document.querySelector("#screen-open-advanced"),
   advancedDetails: document.querySelector(".lab-advanced"),
   positionPills: document.querySelector("#screen-position-pills"),
@@ -237,6 +242,11 @@ function wireEvents() {
     element.addEventListener("change", scheduleRunScreen);
     element.addEventListener("input", scheduleRunScreen);
   });
+  [dom.statMode, dom.statSeason, dom.statWeekStart, dom.statWeekEnd, dom.statLastN].forEach((element) => {
+    if (!element) return;
+    element.addEventListener("change", scheduleRunScreen);
+    element.addEventListener("input", scheduleRunScreen);
+  });
 
   dom.search.addEventListener("keydown", (event) => {
     if (event.key !== "Enter") return;
@@ -327,6 +337,7 @@ function collectAppliedFilters() {
     }
   }
 
+  output.push({ group: "Window", text: describeStatWindow(buildStatWindowFromUI()) });
   return output;
 }
 
@@ -921,6 +932,7 @@ async function runScreen(options = {}) {
       search: dom.search.value,
       team: dom.team.value,
       positions: selectedPositions,
+      window: buildStatWindowFromUI(),
       limit: state.hasRunOnce ? DEFAULT_SCREEN_LIMIT : INITIAL_SCREEN_LIMIT,
       offset: 0,
       sort_key: sortIsBuiltin ? "fantasy_points_ppr" : state.sortKey,
@@ -942,7 +954,7 @@ async function runScreen(options = {}) {
     state.hasRunOnce = true;
 
     setStatus(
-      `Screen complete. ${sortedItems.length} players · ${filters.length} metric filter${
+      `Screen complete (${describeStatWindow(buildStatWindowFromUI())}). ${sortedItems.length} players · ${filters.length} metric filter${
         filters.length === 1 ? "" : "s"
       }.`,
       "success"
@@ -1520,6 +1532,7 @@ function getCurrentViewConfig() {
     version: 1,
     search: String(dom.search.value || ""),
     team: String(dom.team.value || ""),
+    stat_window: buildStatWindowFromUI(),
     positions: [...state.selectedPositions],
     active_columns: [...state.activeColumns],
     active_filters: state.activeFilters.map((item) => ({
@@ -1539,6 +1552,12 @@ function applyViewConfig(rawConfig) {
 
   dom.search.value = String(config.search || "");
   dom.team.value = String(config.team || "");
+  const statWindow = config.stat_window || {};
+  if (dom.statMode) dom.statMode.value = String(statWindow.mode || "last_game");
+  if (dom.statSeason) dom.statSeason.value = String(statWindow.season ?? "");
+  if (dom.statWeekStart) dom.statWeekStart.value = String(statWindow.week_start ?? "");
+  if (dom.statWeekEnd) dom.statWeekEnd.value = String(statWindow.week_end ?? "");
+  if (dom.statLastN) dom.statLastN.value = String(statWindow.last_n_games ?? "5");
 
   state.selectedPositions = new Set(
     (Array.isArray(config.positions) ? config.positions : [])
@@ -1704,6 +1723,47 @@ function base64UrlDecode(value) {
   const binary = atob(padded);
   const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
   return new TextDecoder().decode(bytes);
+}
+
+function buildStatWindowFromUI() {
+  const modeRaw = String(dom.statMode?.value || "last_game").trim();
+  const mode = ["latest", "last_game", "last_season", "last_n_games", "custom_range"].includes(modeRaw)
+    ? modeRaw
+    : "last_game";
+  const season = toNumberOrNull(dom.statSeason?.value);
+  const weekStart = toNumberOrNull(dom.statWeekStart?.value);
+  const weekEnd = toNumberOrNull(dom.statWeekEnd?.value);
+  const lastNGames = toNumberOrNull(dom.statLastN?.value);
+  return {
+    mode,
+    season,
+    week_start: weekStart,
+    week_end: weekEnd,
+    last_n_games: lastNGames
+  };
+}
+
+function describeStatWindow(windowConfig) {
+  const mode = String(windowConfig?.mode || "last_game");
+  if (mode === "latest") return "latest snapshot";
+  if (mode === "last_game") return "last game";
+  if (mode === "last_season") {
+    const season = toNumberOrNull(windowConfig?.season);
+    return season !== null ? `season ${season}` : "last season";
+  }
+  if (mode === "last_n_games") {
+    const n = toNumberOrNull(windowConfig?.last_n_games);
+    return n !== null ? `last ${n} games` : "last N games";
+  }
+  if (mode === "custom_range") {
+    const season = toNumberOrNull(windowConfig?.season);
+    const start = toNumberOrNull(windowConfig?.week_start);
+    const end = toNumberOrNull(windowConfig?.week_end);
+    if (season !== null && start !== null && end !== null) return `${season} weeks ${Math.min(start, end)}-${Math.max(start, end)}`;
+    if (season !== null) return `season ${season}`;
+    return "custom range";
+  }
+  return "last game";
 }
 
 function setupCustomScrollbars() {

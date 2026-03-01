@@ -2036,6 +2036,14 @@ h3 {
   align-items: end;
 }
 
+.lab-window-grid {
+  margin-top: 0.46rem;
+  display: grid;
+  gap: 0.52rem;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  align-items: end;
+}
+
 .lab-runbar {
   display: grid;
   gap: 0.42rem;

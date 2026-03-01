@@ -1417,9 +1417,183 @@ def fetch_teams(connection):
     return [row["team"] for row in rows if row["team"]]
 
 
+def normalize_window_mode(value):
+    token = str(value or "").strip().lower()
+    if token in {"latest", "last_game", "last_season", "last_n_games", "custom_range"}:
+        return token
+    return "latest"
+
+
+def parse_window_config(payload):
+    raw_window = payload.get("window") if isinstance(payload, dict) else {}
+    if not isinstance(raw_window, dict):
+        raw_window = {}
+    mode = normalize_window_mode(raw_window.get("mode") or payload.get("window_mode"))
+    season = parse_int(raw_window.get("season") or payload.get("season"), None)
+    week_start = parse_int(raw_window.get("week_start") or payload.get("week_start"), None)
+    week_end = parse_int(raw_window.get("week_end") or payload.get("week_end"), None)
+    last_n_games = parse_int(raw_window.get("last_n_games") or payload.get("last_n_games"), None)
+    if last_n_games is not None:
+        last_n_games = max(1, min(int(last_n_games), 64))
+    return {
+        "mode": mode,
+        "season": season,
+        "week_start": week_start,
+        "week_end": week_end,
+        "last_n_games": last_n_games,
+    }
+
+
+def rebuild_window_temp_tables(connection, window):
+    mode = window.get("mode") or "latest"
+    season = window.get("season")
+    week_start = window.get("week_start")
+    week_end = window.get("week_end")
+    last_n_games = window.get("last_n_games") or 5
+
+    connection.execute("DROP TABLE IF EXISTS temp_selected_games")
+    connection.execute("DROP TABLE IF EXISTS temp_window_metrics")
+    connection.execute("DROP TABLE IF EXISTS temp_window_stats")
+
+    if mode == "last_game":
+        connection.execute(
+            """
+            CREATE TEMP TABLE temp_selected_games AS
+            WITH distinct_games AS (
+              SELECT DISTINCT player_id, season, week
+              FROM player_week_stats
+              WHERE season_type='regular'
+            ),
+            ranked AS (
+              SELECT
+                player_id, season, week,
+                ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY season DESC, week DESC) AS rn
+              FROM distinct_games
+            )
+            SELECT player_id, season, week
+            FROM ranked
+            WHERE rn = 1
+            """
+        )
+    elif mode == "last_n_games":
+        connection.execute(
+            """
+            CREATE TEMP TABLE temp_selected_games AS
+            WITH distinct_games AS (
+              SELECT DISTINCT player_id, season, week
+              FROM player_week_stats
+              WHERE season_type='regular'
+            ),
+            ranked AS (
+              SELECT
+                player_id, season, week,
+                ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY season DESC, week DESC) AS rn
+              FROM distinct_games
+            )
+            SELECT player_id, season, week
+            FROM ranked
+            WHERE rn <= ?
+            """,
+            [last_n_games],
+        )
+    elif mode == "last_season":
+        effective_season = season
+        if effective_season is None:
+            row = connection.execute("SELECT MAX(season) AS value FROM player_week_stats").fetchone()
+            effective_season = int(row["value"]) if row and row["value"] is not None else None
+        if effective_season is None:
+            connection.execute("CREATE TEMP TABLE temp_selected_games (player_id TEXT, season INTEGER, week INTEGER)")
+        else:
+            connection.execute(
+                """
+                CREATE TEMP TABLE temp_selected_games AS
+                SELECT DISTINCT player_id, season, week
+                FROM player_week_stats
+                WHERE season_type='regular' AND season = ?
+                """,
+                [effective_season],
+            )
+    else:  # custom_range
+        where = ["season_type='regular'"]
+        params = []
+        if season is not None:
+            where.append("season = ?")
+            params.append(season)
+        if week_start is not None and week_end is not None:
+            low = min(week_start, week_end)
+            high = max(week_start, week_end)
+            where.append("week BETWEEN ? AND ?")
+            params.extend([low, high])
+        elif week_start is not None:
+            where.append("week >= ?")
+            params.append(week_start)
+        elif week_end is not None:
+            where.append("week <= ?")
+            params.append(week_end)
+        connection.execute(
+            f"""
+            CREATE TEMP TABLE temp_selected_games AS
+            SELECT DISTINCT player_id, season, week
+            FROM player_week_stats
+            WHERE {' AND '.join(where)}
+            """,
+            params,
+        )
+
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_temp_selected_games_player_week ON temp_selected_games(player_id, season, week)")
+
+    connection.execute(
+        """
+        CREATE TEMP TABLE temp_window_metrics AS
+        SELECT
+          pwm.player_id,
+          pwm.stat_key,
+          AVG(pwm.stat_value) AS stat_value
+        FROM player_week_metrics pwm
+        JOIN temp_selected_games g
+          ON g.player_id = pwm.player_id
+         AND g.season = pwm.season
+         AND g.week = pwm.week
+        GROUP BY pwm.player_id, pwm.stat_key
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_temp_window_metrics_key_player ON temp_window_metrics(stat_key, player_id, stat_value)")
+
+    connection.execute(
+        """
+        CREATE TEMP TABLE temp_window_stats AS
+        SELECT
+          pws.player_id,
+          MAX(pws.season) AS season,
+          MAX(pws.week) AS week,
+          'window' AS source,
+          AVG(pws.fantasy_points_ppr) AS fantasy_points_ppr,
+          AVG(pws.passing_yards) AS passing_yards,
+          AVG(pws.rushing_yards) AS rushing_yards,
+          AVG(pws.receiving_yards) AS receiving_yards,
+          AVG(pws.receptions) AS receptions,
+          AVG(pws.touchdowns) AS touchdowns
+        FROM player_week_stats pws
+        JOIN temp_selected_games g
+          ON g.player_id = pws.player_id
+         AND g.season = pws.season
+         AND g.week = pws.week
+        GROUP BY pws.player_id
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_temp_window_stats_player ON temp_window_stats(player_id)")
+
+
 def fetch_screener_query(connection, payload):
     initialize_database(connection)
     payload = payload or {}
+    window = parse_window_config(payload)
+    metrics_table = "player_latest_metrics"
+    stats_table = "player_latest_stats"
+    if window["mode"] != "latest":
+        rebuild_window_temp_tables(connection, window)
+        metrics_table = "temp_window_metrics"
+        stats_table = "temp_window_stats"
 
     search = str(payload.get("search") or "").strip().lower()
     position = str(payload.get("position") or "").strip().upper()
@@ -1457,7 +1631,7 @@ def fetch_screener_query(connection, payload):
         filter_sql, filter_params = build_filter_sql(alias, metric_filter)
         filter_join_parts.append(
             f"""
-            JOIN player_latest_metrics {alias}
+            JOIN {metrics_table} {alias}
               ON {alias}.player_id = p.player_id
              AND {alias}.stat_key = ?
              AND {filter_sql}
@@ -1501,8 +1675,8 @@ def fetch_screener_query(connection, payload):
               l.touchdowns AS latest_touchdowns,
               COALESCE(msort.stat_value, COALESCE(l.fantasy_points_ppr, {sort_null_fill})) AS sort_value
             {from_clause}
-            LEFT JOIN player_latest_stats l ON l.player_id = p.player_id
-            LEFT JOIN player_latest_metrics msort
+            LEFT JOIN {stats_table} l ON l.player_id = p.player_id
+            LEFT JOIN {metrics_table} msort
               ON msort.player_id = p.player_id
              AND msort.stat_key = ?
             WHERE {' AND '.join(where_parts)}
@@ -1518,7 +1692,7 @@ def fetch_screener_query(connection, payload):
             mv.stat_key,
             mv.stat_value
           FROM ranked r
-          LEFT JOIN player_latest_metrics mv
+          LEFT JOIN {metrics_table} mv
             ON mv.player_id = r.player_id
            AND mv.stat_key IN ({metric_placeholders})
           ORDER BY r.sort_value {sort_order}, r.full_name ASC
@@ -1566,8 +1740,8 @@ def fetch_screener_query(connection, payload):
             l.receptions AS latest_receptions,
             l.touchdowns AS latest_touchdowns
           {from_clause}
-          LEFT JOIN player_latest_stats l ON l.player_id = p.player_id
-          LEFT JOIN player_latest_metrics msort
+          LEFT JOIN {stats_table} l ON l.player_id = p.player_id
+          LEFT JOIN {metrics_table} msort
             ON msort.player_id = p.player_id
            AND msort.stat_key = ?
           WHERE {' AND '.join(where_parts)}
@@ -1581,6 +1755,7 @@ def fetch_screener_query(connection, payload):
 
     return {
         "count": len(items),
+        "window": window,
         "filters": filters,
         "columns": requested_metric_keys,
         "items": items,

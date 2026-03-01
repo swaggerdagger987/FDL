@@ -14,7 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260228-scroll-football-5" />
+    <link rel="stylesheet" href="./styles.css?v=20260228-window-filters-1" />
   </head>
   <body>
     <div class="ambient-backdrop" aria-hidden="true"></div>
@@ -63,6 +63,34 @@
               <select id="screen-team">
                 <option value="">All Teams</option>
               </select>
+            </label>
+          </div>
+          <div class="lab-window-grid">
+            <label>
+              Stat Window
+              <select id="screen-stat-mode">
+                <option value="last_game">Last Game</option>
+                <option value="last_season">Last Season</option>
+                <option value="last_n_games">Last N Games</option>
+                <option value="custom_range">Custom Range</option>
+                <option value="latest">Latest Snapshot</option>
+              </select>
+            </label>
+            <label>
+              Season
+              <input id="screen-stat-season" type="number" min="1999" max="2100" step="1" placeholder="2024" />
+            </label>
+            <label>
+              Week Start
+              <input id="screen-stat-week-start" type="number" min="1" max="22" step="1" placeholder="12" />
+            </label>
+            <label>
+              Week End
+              <input id="screen-stat-week-end" type="number" min="1" max="22" step="1" placeholder="14" />
+            </label>
+            <label>
+              Last N Games
+              <input id="screen-stat-last-n" type="number" min="1" max="64" step="1" placeholder="5" />
             </label>
           </div>
           <div class="position-filter-group">
