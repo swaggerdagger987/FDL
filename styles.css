@@ -1680,6 +1680,340 @@ h3 {
   color: #983535;
 }
 
+/* ── Manager Profile Header ── */
+
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  flex-wrap: wrap;
+}
+
+.profile-avatar,
+.manager-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  background: var(--accent, #2563eb);
+  color: #fff;
+  font-weight: 700;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.manager-avatar {
+  width: 2.2rem;
+  height: 2.2rem;
+  font-size: 0.85rem;
+}
+
+.profile-header-info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.profile-header-info h2 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.profile-label {
+  color: var(--text-muted, #888);
+  font-style: italic;
+  margin: 0.15rem 0 0;
+}
+
+.profile-header-stats {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.profile-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.profile-stat-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary, #e8e8e8);
+}
+
+.profile-stat-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted, #888);
+}
+
+.you-badge {
+  display: inline-block;
+  font-size: 0.6rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  background: var(--accent, #2563eb);
+  color: #fff;
+  vertical-align: middle;
+  margin-left: 0.4rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.manager-card-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.manager-card-identity h3 {
+  margin: 0;
+}
+
+.manager-record {
+  font-size: 0.78rem;
+  color: var(--text-muted, #888);
+}
+
+/* ── Tab Navigation ── */
+
+.profile-tab-nav {
+  display: flex;
+  gap: 0.25rem;
+  margin: 1rem 0;
+  border-bottom: 1px solid var(--border, #333);
+  padding-bottom: 0;
+}
+
+.profile-tab-btn {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted, #888);
+  padding: 0.55rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.profile-tab-btn:hover {
+  color: var(--text-primary, #e8e8e8);
+}
+
+.profile-tab-btn.active {
+  color: var(--accent, #2563eb);
+  border-bottom-color: var(--accent, #2563eb);
+}
+
+.intel-tab-content {
+  margin-top: 1rem;
+}
+
+/* ── Activity Feed ── */
+
+.activity-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.activity-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.6rem 0.5rem;
+  border-bottom: 1px solid var(--border, #222);
+}
+
+.activity-row:last-child {
+  border-bottom: none;
+}
+
+.activity-icon {
+  font-size: 1rem;
+  width: 1.6rem;
+  text-align: center;
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+}
+
+.activity-icon-trade { color: #f59e0b; }
+.activity-icon-waiver { color: #2563eb; }
+.activity-icon-free_agent { color: #22c55e; }
+
+.activity-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.activity-date {
+  font-size: 0.72rem;
+  color: var(--text-muted, #888);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.activity-desc {
+  margin: 0.15rem 0 0;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.faab-bid-tag {
+  display: inline-block;
+  font-size: 0.72rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 3px;
+  background: var(--accent, #2563eb);
+  color: #fff;
+  font-weight: 600;
+  vertical-align: middle;
+  margin-left: 0.3rem;
+}
+
+/* ── Rivalries ── */
+
+.rivalry-highlights {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.2rem;
+}
+
+.rivalry-highlight {
+  flex: 1;
+  padding: 0.8rem 1rem;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.rivalry-highlight-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 0.25rem;
+}
+
+.rivalry-highlight h4 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.rivalry-highlight p {
+  margin: 0.2rem 0 0;
+  font-weight: 600;
+}
+
+.rivalry-highlight.nemesis {
+  background: rgba(152, 53, 53, 0.15);
+  border: 1px solid rgba(152, 53, 53, 0.3);
+  color: #e86060;
+}
+
+.rivalry-highlight.nemesis .rivalry-highlight-label {
+  color: #e86060;
+}
+
+.rivalry-highlight.favorite {
+  background: rgba(31, 122, 72, 0.15);
+  border: 1px solid rgba(31, 122, 72, 0.3);
+  color: #4ade80;
+}
+
+.rivalry-highlight.favorite .rivalry-highlight-label {
+  color: #4ade80;
+}
+
+.rivalry-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.rivalry-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid var(--border, #222);
+  font-size: 0.88rem;
+}
+
+.rivalry-opponent {
+  width: 9rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rivalry-record {
+  width: 4.5rem;
+  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  font-size: 0.82rem;
+}
+
+.rivalry-bar {
+  flex: 1;
+}
+
+.rivalry-pf {
+  width: 4.5rem;
+  text-align: right;
+  color: var(--text-muted, #888);
+  font-size: 0.8rem;
+}
+
+/* ── Trends Table ── */
+
+.trends-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.trends-table th {
+  text-align: left;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted, #888);
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--border, #333);
+}
+
+.trends-table td {
+  padding: 0.55rem 0.5rem;
+  border-bottom: 1px solid var(--border, #222);
+}
+
+.trend-bar-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.trend-bar-cell .manager-bar-track {
+  flex: 1;
+}
+
+.trend-bar-cell span {
+  font-size: 0.78rem;
+  min-width: 2rem;
+}
+
+.trend-label {
+  font-size: 0.75rem;
+  font-style: italic;
+  color: var(--text-muted, #888);
+}
+
 .link-card {
   text-decoration: none;
   transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
@@ -3702,5 +4036,44 @@ body::-webkit-scrollbar-thumb:hover,
 
   .hand-divider {
     display: none;
+  }
+
+  .profile-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.8rem;
+  }
+
+  .profile-header-stats {
+    gap: 1rem;
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .profile-tab-nav {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .rivalry-highlights {
+    flex-direction: column;
+  }
+
+  .rivalry-row {
+    flex-wrap: wrap;
+  }
+
+  .rivalry-opponent {
+    width: 100%;
+    margin-bottom: 0.2rem;
+  }
+
+  .trends-table {
+    font-size: 0.75rem;
+  }
+
+  .trends-table th,
+  .trends-table td {
+    padding: 0.35rem 0.3rem;
   }
 }
