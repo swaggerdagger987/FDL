@@ -13,6 +13,10 @@ import {
 import { clamp, dedupe, escapeHtml, round, signed } from "./utils.js";
 import {
   buildAdversarialIntelReport,
+  buildManagerRecords,
+  buildRivalries,
+  buildActivityFeed,
+  buildSeasonTrends,
   collectSleeperPlayerIdsFromSeasonData,
   fetchLeagueHistoryChain,
   fetchLeagueSeasonData,
@@ -36,13 +40,6 @@ const dom = {
   detailSection: document.querySelector("#intel-detail-section"),
   detailTitle: document.querySelector("#intel-detail-title"),
   detailSubhead: document.querySelector("#intel-detail-subhead"),
-  overviewCards: document.querySelector("#intel-overview-cards"),
-  rosterBars: document.querySelector("#intel-roster-bars"),
-  rosterMeta: document.querySelector("#intel-roster-meta"),
-  faabStats: document.querySelector("#intel-faab-stats"),
-  faabPredictor: document.querySelector("#intel-faab-predictor"),
-  tradePattern: document.querySelector("#intel-trade-pattern"),
-  tradeTimeline: document.querySelector("#intel-trade-timeline"),
   backBtn: document.querySelector("#intel-back-btn")
 };
 
@@ -53,6 +50,9 @@ const state = {
   seasonData: [],
   report: null,
   detailManagerId: "",
+  profileTab: "overview",
+  managerRecords: {},
+  displayByUserId: {},
   sleeperPlayersById: null
 };
 
@@ -256,6 +256,40 @@ async function buildIntelReport(seasonData, myUserId) {
     includeTradeTimeline: true
   });
   mergeRosterContext(report, seasonData[0], state.sleeperPlayersById);
+
+  // Build display name map for rivalries
+  const displayMap = {};
+  for (const season of seasonData) {
+    for (const user of season.users || []) {
+      const uid = String(user.user_id || "");
+      if (uid) displayMap[uid] = user.display_name || user.username || `user-${uid}`;
+    }
+  }
+  state.displayByUserId = displayMap;
+
+  // Build win/loss records + head-to-head from matchup data
+  state.managerRecords = buildManagerRecords(seasonData);
+
+  // Merge records into manager profiles
+  for (const manager of report.managers) {
+    const rec = state.managerRecords[manager.userId];
+    if (rec) {
+      manager.record = { wins: rec.wins, losses: rec.losses, ties: rec.ties };
+      manager.totalPointsFor = rec.totalPointsFor;
+      manager.totalPointsAgainst = rec.totalPointsAgainst;
+      manager.highScore = rec.highScore;
+      manager.winStreak = rec.winStreak;
+      manager.maxWinStreak = rec.maxWinStreak;
+    } else {
+      manager.record = { wins: 0, losses: 0, ties: 0 };
+      manager.totalPointsFor = 0;
+      manager.totalPointsAgainst = 0;
+      manager.highScore = 0;
+      manager.winStreak = 0;
+      manager.maxWinStreak = 0;
+    }
+  }
+
   return report;
 }
 
@@ -307,10 +341,19 @@ function renderManagerGrid() {
 
   dom.grid.innerHTML = state.report.managers
     .map((manager) => {
+      const rec = manager.record || {};
+      const recordStr = `${rec.wins || 0}-${rec.losses || 0}${rec.ties ? `-${rec.ties}` : ""}`;
+      const initials = (manager.displayName || "?").slice(0, 2).toUpperCase();
       return `
         <article class="manager-card">
           <div class="manager-card-head">
-            <h3>${escapeHtml(manager.displayName)}${manager.isYou ? " (You)" : ""}</h3>
+            <div class="manager-card-identity">
+              <span class="manager-avatar">${escapeHtml(initials)}</span>
+              <div>
+                <h3>${escapeHtml(manager.displayName)}${manager.isYou ? " <span class='you-badge'>YOU</span>" : ""}</h3>
+                <span class="manager-record">${recordStr} · ${round(manager.totalPointsFor || 0, 0)} PF</span>
+              </div>
+            </div>
             <span class="window-tag window-${escapeHtml(manager.windowTag.toLowerCase())}">${escapeHtml(manager.windowTag)}</span>
           </div>
 
@@ -333,7 +376,6 @@ function renderManagerGrid() {
           </div>
 
           <p class="manager-weakness">Weak: ${escapeHtml(manager.weakPositions.join(", "))}</p>
-          <p class="manager-targeting">${escapeHtml(manager.targetingCue)}</p>
 
           <button class="secondary-btn manager-scout-btn" type="button" data-manager-id="${escapeHtml(manager.userId)}">Scout →</button>
         </article>
@@ -365,19 +407,305 @@ function renderDetail() {
   }
 
   dom.detailSection.classList.remove("hidden");
-  dom.detailTitle.textContent = `Scouting Report: ${manager.displayName}`;
-  dom.detailSubhead.textContent = `${activeLeagueName()} · ${state.lookback} season lookback`;
 
-  dom.overviewCards.innerHTML = `
-    ${renderScoreCard("Aggression", `${round(manager.aggressionScore / 10, 1)}/10`, manager.aggressionScore)}
-    ${renderScoreCard("Trade Friendly", `${manager.tradeFriendlinessScore}/10`, manager.tradeFriendlinessScore * 10)}
-    ${renderScoreCard("Risk Tolerance", `${manager.riskToleranceScore}/10`, manager.riskToleranceScore * 10)}
+  // Profile header
+  const rec = manager.record || {};
+  const recordStr = `${rec.wins || 0}-${rec.losses || 0}${rec.ties ? `-${rec.ties}` : ""}`;
+  const initials = (manager.displayName || "?").slice(0, 2).toUpperCase();
+  const record = state.managerRecords[manager.userId];
+  const nemesisData = record ? buildRivalries(record, state.displayByUserId) : null;
+  const nemesisName = nemesisData?.nemesis?.opponentName || "N/A";
+
+  dom.detailTitle.innerHTML = `
+    <div class="profile-header">
+      <span class="profile-avatar">${escapeHtml(initials)}</span>
+      <div class="profile-header-info">
+        <h2>${escapeHtml(manager.displayName)}${manager.isYou ? " <span class='you-badge'>YOU</span>" : ""}</h2>
+        <p class="profile-label">"${escapeHtml(manager.profileLabel)}"</p>
+      </div>
+      <div class="profile-header-stats">
+        <div class="profile-stat">
+          <span class="profile-stat-value">${recordStr}</span>
+          <span class="profile-stat-label">Record</span>
+        </div>
+        <div class="profile-stat">
+          <span class="profile-stat-value">${round(manager.totalPointsFor || 0, 0)}</span>
+          <span class="profile-stat-label">Points For</span>
+        </div>
+        <div class="profile-stat">
+          <span class="profile-stat-value">${manager.highScore || 0}</span>
+          <span class="profile-stat-label">High Score</span>
+        </div>
+        <div class="profile-stat">
+          <span class="profile-stat-value">${escapeHtml(manager.windowTag)}</span>
+          <span class="profile-stat-label">Window</span>
+        </div>
+      </div>
+    </div>
   `;
+  dom.detailSubhead.textContent = `${activeLeagueName()} · ${state.lookback} season lookback · Nemesis: ${nemesisName}`;
 
-  renderRosterComposition(manager);
-  renderFaabSection(manager);
-  renderTradeSection(manager);
+  // Tab navigation
+  const tabs = ["overview", "activity", "rivalries", "trends"];
+  const tabLabels = { overview: "Overview", activity: "Activity", rivalries: "Rivalries", trends: "Trends" };
+  const tabNav = document.getElementById("intel-profile-tabs") || createTabNav();
+  tabNav.innerHTML = tabs.map((tab) =>
+    `<button class="profile-tab-btn ${state.profileTab === tab ? "active" : ""}" data-tab="${tab}">${tabLabels[tab]}</button>`
+  ).join("");
+
+  // Render active tab content
+  const tabContent = document.getElementById("intel-tab-content");
+  if (tabContent) {
+    if (state.profileTab === "overview") renderOverviewTab(manager, tabContent);
+    else if (state.profileTab === "activity") renderActivityTab(manager, tabContent);
+    else if (state.profileTab === "rivalries") renderRivalriesTab(manager, tabContent);
+    else if (state.profileTab === "trends") renderTrendsTab(manager, tabContent);
+  }
+
   publishIntelContext();
+}
+
+function createTabNav() {
+  const existing = document.getElementById("intel-profile-tabs");
+  if (existing) return existing;
+  const nav = document.createElement("nav");
+  nav.id = "intel-profile-tabs";
+  nav.className = "profile-tab-nav";
+  nav.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-tab]");
+    if (!btn) return;
+    state.profileTab = btn.dataset.tab;
+    renderDetail();
+  });
+  // Insert after detailSubhead
+  dom.detailSubhead.insertAdjacentElement("afterend", nav);
+
+  // Create tab content container
+  const content = document.createElement("div");
+  content.id = "intel-tab-content";
+  content.className = "intel-tab-content";
+  nav.insertAdjacentElement("afterend", content);
+
+  return nav;
+}
+
+function renderOverviewTab(manager, container) {
+  container.innerHTML = `
+    <div class="intel-overview-cards">
+      ${renderScoreCard("Aggression", `${round(manager.aggressionScore / 10, 1)}/10`, manager.aggressionScore)}
+      ${renderScoreCard("Trade Friendly", `${manager.tradeFriendlinessScore}/10`, manager.tradeFriendlinessScore * 10)}
+      ${renderScoreCard("Risk Tolerance", `${manager.riskToleranceScore}/10`, manager.riskToleranceScore * 10)}
+    </div>
+    <div class="intel-detail-grid">
+      <article class="intel-detail-card">
+        <h3>Roster Composition</h3>
+        <div class="intel-roster-bars">${renderRosterBarsHTML(manager)}</div>
+        <div class="intel-metadata-list">
+          ${metadataItem("Avg Roster Age", manager.avgRosterAge)}
+          ${metadataItem("Projected Starter Value", `${Number(manager.starterValue || 0).toLocaleString()} KTC`)}
+          ${metadataItem("Weak Positions", manager.weakPositions.join(", "))}
+          ${metadataItem("Max Win Streak", manager.maxWinStreak || 0)}
+        </div>
+      </article>
+      <article class="intel-detail-card predictor-card">
+        <h3>FAAB Behavior + Predictor</h3>
+        <div class="intel-metadata-list">
+          ${metadataItem("Avg Bid", `$${round(manager.avgFaabBid, 1)}`)}
+          ${metadataItem("Max Bid", `$${round(manager.maxFaabBid, 0)}`)}
+          ${metadataItem("Avg Bid % Budget", `${round(manager.faabBidPct, 1)}%`)}
+          ${metadataItem("FAAB Remaining", `$${round(manager.faabRemaining || 0, 0)}`)}
+        </div>
+        <div class="intel-predictor-box">${renderFaabPredictorHTML(manager)}</div>
+      </article>
+    </div>
+    <article class="intel-detail-card">
+      <h3>Trade Behavior</h3>
+      <div class="intel-metadata-list">${renderTradePatternHTML(manager)}</div>
+      <div class="intel-trade-timeline">${renderTradeTimelineHTML(manager)}</div>
+    </article>
+    <p class="manager-targeting">${escapeHtml(manager.targetingCue)}</p>
+  `;
+}
+
+function renderActivityTab(manager, container) {
+  const feed = buildActivityFeed(manager.userId, state.seasonData, state.sleeperPlayersById);
+  if (!feed.length) {
+    container.innerHTML = `<p class="chip-empty">No activity found for this manager in the lookback window.</p>`;
+    return;
+  }
+  container.innerHTML = `
+    <div class="activity-feed">
+      ${feed.map((entry) => {
+        const icon = entry.type === "trade" ? "&#x21C4;" : entry.type === "waiver" ? "&#x2691;" : "&#x2795;";
+        const deltaHtml = entry.delta !== null
+          ? `<span class="${entry.delta >= 0 ? "good" : "bad"}">${signed(entry.delta)} value</span>`
+          : "";
+        const bidHtml = entry.faabBid ? `<span class="faab-bid-tag">$${entry.faabBid}</span>` : "";
+        return `
+          <div class="activity-row">
+            <span class="activity-icon activity-icon-${escapeHtml(entry.type)}">${icon}</span>
+            <div class="activity-body">
+              <span class="activity-date">${escapeHtml(entry.dateLabel)}</span>
+              <p class="activity-desc">${escapeHtml(entry.description)} ${bidHtml} ${deltaHtml}</p>
+            </div>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function renderRivalriesTab(manager, container) {
+  const record = state.managerRecords[manager.userId];
+  if (!record) {
+    container.innerHTML = `<p class="chip-empty">No matchup data available.</p>`;
+    return;
+  }
+  const { rivalries, nemesis, favorite } = buildRivalries(record, state.displayByUserId);
+  if (!rivalries.length) {
+    container.innerHTML = `<p class="chip-empty">No head-to-head data found.</p>`;
+    return;
+  }
+
+  const highlightCards = [];
+  if (nemesis && nemesis.losses > 0) {
+    highlightCards.push(`
+      <article class="rivalry-highlight nemesis">
+        <p class="rivalry-highlight-label">Nemesis</p>
+        <h4>${escapeHtml(nemesis.opponentName)}</h4>
+        <p>${nemesis.wins}-${nemesis.losses}${nemesis.ties ? `-${nemesis.ties}` : ""}</p>
+      </article>
+    `);
+  }
+  if (favorite && favorite.wins > 0 && favorite.opponentId !== nemesis?.opponentId) {
+    highlightCards.push(`
+      <article class="rivalry-highlight favorite">
+        <p class="rivalry-highlight-label">Favorite Target</p>
+        <h4>${escapeHtml(favorite.opponentName)}</h4>
+        <p>${favorite.wins}-${favorite.losses}${favorite.ties ? `-${favorite.ties}` : ""}</p>
+      </article>
+    `);
+  }
+
+  container.innerHTML = `
+    ${highlightCards.length ? `<div class="rivalry-highlights">${highlightCards.join("")}</div>` : ""}
+    <div class="rivalry-list">
+      ${rivalries.map((r) => {
+        const total = r.wins + r.losses + r.ties;
+        const winPct = total ? round((r.wins / total) * 100, 0) : 0;
+        return `
+          <div class="rivalry-row">
+            <div class="rivalry-opponent">${escapeHtml(r.opponentName)}</div>
+            <div class="rivalry-record">${r.wins}-${r.losses}${r.ties ? `-${r.ties}` : ""}</div>
+            <div class="manager-bar-track rivalry-bar">
+              <div class="manager-bar-fill ${winPct >= 50 ? "" : "weak"}" style="width:${clamp(winPct, 2, 100)}%"></div>
+            </div>
+            <div class="rivalry-pf">${round(r.pointsFor, 0)} PF</div>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function renderTrendsTab(manager, container) {
+  const trends = buildSeasonTrends(manager.userId, state.seasonData, state.sleeperPlayersById, state.session?.user_id);
+  if (!trends.length) {
+    container.innerHTML = `<p class="chip-empty">No multi-season data available.</p>`;
+    return;
+  }
+
+  container.innerHTML = `
+    <table class="trends-table">
+      <thead>
+        <tr>
+          <th>Season</th>
+          <th>Record</th>
+          <th>PF</th>
+          <th>Trades</th>
+          <th>Waivers</th>
+          <th>Avg FAAB</th>
+          <th>Aggression</th>
+          <th>Style</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${trends.map((t) => `
+          <tr>
+            <td>${t.season}</td>
+            <td>${escapeHtml(t.record)}</td>
+            <td>${t.pointsFor}</td>
+            <td>${t.tradeCount}</td>
+            <td>${t.waiverCount}</td>
+            <td>$${t.avgFaabBid}</td>
+            <td>
+              <div class="trend-bar-cell">
+                <div class="manager-bar-track"><div class="manager-bar-fill" style="width:${clamp(t.aggressionScore, 2, 100)}%"></div></div>
+                <span>${round(t.aggressionScore / 10, 1)}</span>
+              </div>
+            </td>
+            <td><span class="trend-label">${escapeHtml(t.profileLabel)}</span></td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+// Helper renderers split from old monolithic functions
+function renderRosterBarsHTML(manager) {
+  const positions = ["QB", "RB", "WR", "TE"];
+  return positions.map((position) => {
+    const entry = manager.positionStrengths?.[position] || { ratio: 0, label: "Average" };
+    const pct = clamp(entry.ratio * 100, 1, 100);
+    const tone = entry.label === "WEAK" ? "weak" : entry.label === "Elite" ? "elite" : "";
+    return `
+      <div class="roster-bar-row">
+        <span>${position}</span>
+        <div class="manager-bar-track"><div class="manager-bar-fill ${tone}" style="width:${pct}%"></div></div>
+        <strong>${escapeHtml(entry.label)}</strong>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderFaabPredictorHTML(manager) {
+  const predictor = buildFaabPredictor(manager);
+  return `
+    <p><strong>Predicted bid:</strong> $${predictor.low} - $${predictor.high}</p>
+    <p><strong>Confidence:</strong> ${predictor.confidence}</p>
+    <p>${escapeHtml(predictor.reasoning)}</p>
+  `;
+}
+
+function renderTradePatternHTML(manager) {
+  const pattern = manager.tradePattern || { buys: "N/A", sells: "N/A", avoids: "N/A" };
+  return `
+    ${metadataItem("Trades Completed", manager.tradeCount)}
+    ${metadataItem("Most Active Position", manager.topPositionAdds || "N/A")}
+    ${metadataItem("Buys", pattern.buys)}
+    ${metadataItem("Sells", pattern.sells)}
+    ${metadataItem("Avoids", pattern.avoids)}
+  `;
+}
+
+function renderTradeTimelineHTML(manager) {
+  const entries = manager.tradeTimeline || [];
+  if (!entries.length) {
+    return `<p class="chip-empty">No recent trade timeline available.</p>`;
+  }
+  return entries.slice(0, 5).map((entry) => {
+    const win = Number(entry.delta) >= 0;
+    return `
+      <div class="trade-event-row">
+        <div class="trade-event-date">${escapeHtml(entry.dateLabel)}</div>
+        <div class="trade-event-copy">
+          <p>${escapeHtml(entry.summary)}</p>
+          <p class="${win ? "good" : "bad"}">${win ? "\u2713" : "\u2717"} Value delta ${signed(entry.delta)}</p>
+        </div>
+      </div>
+    `;
+  }).join("");
 }
 
 function publishIntelContext() {
@@ -425,45 +753,7 @@ function renderScoreCard(label, value, pct) {
   `;
 }
 
-function renderRosterComposition(manager) {
-  const positions = ["QB", "RB", "WR", "TE"];
-  dom.rosterBars.innerHTML = positions
-    .map((position) => {
-      const entry = manager.positionStrengths?.[position] || { ratio: 0, label: "Average" };
-      const pct = clamp(entry.ratio * 100, 1, 100);
-      const tone = entry.label === "WEAK" ? "weak" : entry.label === "Elite" ? "elite" : "";
-      return `
-        <div class="roster-bar-row">
-          <span>${position}</span>
-          <div class="manager-bar-track"><div class="manager-bar-fill ${tone}" style="width:${pct}%"></div></div>
-          <strong>${escapeHtml(entry.label)}</strong>
-        </div>
-      `;
-    })
-    .join("");
-
-  dom.rosterMeta.innerHTML = `
-    ${metadataItem("Avg Roster Age", manager.avgRosterAge)}
-    ${metadataItem("Projected Starter Value", `${Number(manager.starterValue || 0).toLocaleString()} KTC`) }
-    ${metadataItem("Weak Positions", manager.weakPositions.join(", "))}
-  `;
-}
-
-function renderFaabSection(manager) {
-  const predictor = buildFaabPredictor(manager);
-  dom.faabStats.innerHTML = `
-    ${metadataItem("Avg Bid", `$${round(manager.avgFaabBid, 1)}`)}
-    ${metadataItem("Max Bid", `$${round(manager.maxFaabBid, 0)}`)}
-    ${metadataItem("Avg Bid % Budget", `${round(manager.faabBidPct, 1)}%`)}
-    ${metadataItem("FAAB Remaining", `$${round(manager.faabRemaining || 0, 0)}`)}
-  `;
-
-  dom.faabPredictor.innerHTML = `
-    <p><strong>Predicted bid:</strong> $${predictor.low} - $${predictor.high}</p>
-    <p><strong>Confidence:</strong> ${predictor.confidence}</p>
-    <p>${escapeHtml(predictor.reasoning)}</p>
-  `;
-}
+// renderRosterComposition and renderFaabSection replaced by tab-based renderOverviewTab
 
 function buildFaabPredictor(manager) {
   const base = Number(manager.avgFaabBid || 8);
@@ -478,38 +768,7 @@ function buildFaabPredictor(manager) {
   return { low, high, confidence, reasoning };
 }
 
-function renderTradeSection(manager) {
-  const pattern = manager.tradePattern || { buys: "N/A", sells: "N/A", avoids: "N/A" };
-  dom.tradePattern.innerHTML = `
-    ${metadataItem("Trades Completed", manager.tradeCount)}
-    ${metadataItem("Most Active Position", manager.topPositionAdds || "N/A")}
-    ${metadataItem("Buys", pattern.buys)}
-    ${metadataItem("Sells", pattern.sells)}
-    ${metadataItem("Avoids", pattern.avoids)}
-  `;
-
-  const entries = manager.tradeTimeline || [];
-  if (!entries.length) {
-    dom.tradeTimeline.innerHTML = `<p class="chip-empty">No recent trade timeline available for this lookback window.</p>`;
-    return;
-  }
-
-  dom.tradeTimeline.innerHTML = entries
-    .slice(0, 5)
-    .map((entry) => {
-      const win = Number(entry.delta) >= 0;
-      return `
-        <div class="trade-event-row">
-          <div class="trade-event-date">${escapeHtml(entry.dateLabel)}</div>
-          <div class="trade-event-copy">
-            <p>${escapeHtml(entry.summary)}</p>
-            <p class="${win ? "good" : "bad"}">${win ? "✓" : "✕"} Value delta ${signed(entry.delta)}</p>
-          </div>
-        </div>
-      `;
-    })
-    .join("");
-}
+// renderTradeSection replaced by tab-based renderOverviewTab
 
 function metadataItem(label, value) {
   return `<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(String(value ?? "-"))}</p>`;

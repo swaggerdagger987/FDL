@@ -11,6 +11,7 @@ export const AGGRESSION_WEIGHTS = {
 
 const TRANSACTION_CACHE_TTL_MS = 10 * 60 * 1000;
 const TRANSACTION_CACHE_KEY_PREFIX = "fdl_tx_cache_v2";
+const MATCHUP_CACHE_KEY_PREFIX = "fdl_matchup_cache_v1";
 
 function readLocalCache(key) {
   try {
@@ -107,20 +108,60 @@ export async function fetchAllTransactionsForLeague(leagueId, fetchSleeperJSON, 
   return transactions;
 }
 
+function matchupCacheKey(leagueId, namespace) {
+  return `${MATCHUP_CACHE_KEY_PREFIX}:${namespace}:${leagueId}`;
+}
+
+export async function fetchAllMatchupsForLeague(leagueId, fetchSleeperJSON, options = {}) {
+  const namespace = String(options.cacheNamespace || "intel");
+  const ttlMs = Number(options.cacheTtlMs || TRANSACTION_CACHE_TTL_MS);
+  const weekCount = Number(options.regularSeasonWeeks || SLEEPER_REGULAR_SEASON_WEEKS);
+  const key = matchupCacheKey(leagueId, namespace);
+  const now = Date.now();
+
+  const cached = readLocalCache(key);
+  if (
+    cached &&
+    Number.isFinite(Number(cached.cached_at_ms)) &&
+    now - Number(cached.cached_at_ms) <= ttlMs &&
+    Array.isArray(cached.matchups)
+  ) {
+    return cached.matchups;
+  }
+
+  const weeks = Array.from({ length: weekCount }, (_, index) => index + 1);
+  const perWeek = await Promise.all(
+    weeks.map(async (week) => {
+      try {
+        const weekMatchups = await fetchSleeperJSON(`/league/${leagueId}/matchups/${week}`);
+        if (!Array.isArray(weekMatchups)) return [];
+        return weekMatchups.map((m) => ({ ...m, _week: week }));
+      } catch (error) {
+        return [];
+      }
+    })
+  );
+  const matchups = perWeek.flat();
+  writeLocalCache(key, { cached_at_ms: now, matchups });
+  return matchups;
+}
+
 export async function fetchLeagueSeasonData(leagues, fetchSleeperJSON, options = {}) {
   const list = Array.isArray(leagues) ? leagues : [];
   return Promise.all(
     list.map(async (league) => {
-      const [users, rosters, transactions] = await Promise.all([
+      const [users, rosters, transactions, matchups] = await Promise.all([
         fetchSleeperJSON(`/league/${league.league_id}/users`),
         fetchSleeperJSON(`/league/${league.league_id}/rosters`),
-        fetchAllTransactionsForLeague(String(league.league_id), fetchSleeperJSON, options)
+        fetchAllTransactionsForLeague(String(league.league_id), fetchSleeperJSON, options),
+        fetchAllMatchupsForLeague(String(league.league_id), fetchSleeperJSON, options)
       ]);
       return {
         league,
         users: Array.isArray(users) ? users : [],
         rosters: Array.isArray(rosters) ? rosters : [],
-        transactions: Array.isArray(transactions) ? transactions : []
+        transactions: Array.isArray(transactions) ? transactions : [],
+        matchups: Array.isArray(matchups) ? matchups : []
       };
     })
   );
@@ -609,6 +650,352 @@ function deriveTradePattern(manager) {
     sells: topPosition === "WR" ? "aging RBs, fringe veterans" : "bench depth, aging pieces",
     avoids: manager.tradeFriendlinessScore <= 3 ? "high-variance packages" : "1-for-1 QB swaps"
   };
+}
+
+// ---------------------------------------------------------------------------
+// Win/Loss Records + Head-to-Head Rivalries
+// ---------------------------------------------------------------------------
+
+export function buildManagerRecords(seasonData) {
+  const records = {};
+
+  for (const season of seasonData || []) {
+    const ownerByRosterId = {};
+    for (const roster of season.rosters || []) {
+      const rosterId = String(roster.roster_id || "");
+      const ownerId = String(roster.owner_id || "");
+      if (rosterId && ownerId) ownerByRosterId[rosterId] = ownerId;
+    }
+
+    // Seed records from roster settings (cumulative for the season)
+    for (const roster of season.rosters || []) {
+      const ownerId = String(roster.owner_id || "");
+      if (!ownerId) continue;
+      if (!records[ownerId]) {
+        records[ownerId] = {
+          wins: 0, losses: 0, ties: 0,
+          totalPointsFor: 0, totalPointsAgainst: 0,
+          highScore: 0, weeklyScores: [],
+          winStreak: 0, loseStreak: 0, maxWinStreak: 0, maxLoseStreak: 0,
+          headToHead: {},
+          seasonRecords: []
+        };
+      }
+      const seasonWins = Number(roster.settings?.wins || 0);
+      const seasonLosses = Number(roster.settings?.losses || 0);
+      const seasonTies = Number(roster.settings?.ties || 0);
+      const fp = Number(roster.settings?.fpts || 0) + Number(roster.settings?.fpts_decimal || 0) / 100;
+      const pa = Number(roster.settings?.fpts_against || 0) + Number(roster.settings?.fpts_against_decimal || 0) / 100;
+
+      records[ownerId].seasonRecords.push({
+        season: Number(season.league?.season || 0),
+        wins: seasonWins,
+        losses: seasonLosses,
+        ties: seasonTies,
+        pointsFor: round(fp, 1),
+        pointsAgainst: round(pa, 1)
+      });
+      records[ownerId].wins += seasonWins;
+      records[ownerId].losses += seasonLosses;
+      records[ownerId].ties += seasonTies;
+      records[ownerId].totalPointsFor += fp;
+      records[ownerId].totalPointsAgainst += pa;
+    }
+
+    // Parse matchups for weekly scores + head-to-head
+    const matchupsByWeek = {};
+    for (const m of season.matchups || []) {
+      const week = Number(m._week || 0);
+      if (!week) continue;
+      if (!matchupsByWeek[week]) matchupsByWeek[week] = [];
+      matchupsByWeek[week].push(m);
+    }
+
+    for (const [weekStr, entries] of Object.entries(matchupsByWeek)) {
+      const week = Number(weekStr);
+      // Group by matchup_id to find opponents
+      const byMatchupId = {};
+      for (const entry of entries) {
+        const mid = entry.matchup_id;
+        if (mid == null) continue;
+        if (!byMatchupId[mid]) byMatchupId[mid] = [];
+        byMatchupId[mid].push(entry);
+      }
+
+      for (const pair of Object.values(byMatchupId)) {
+        if (pair.length !== 2) continue;
+        const [a, b] = pair;
+        const ownerA = ownerByRosterId[String(a.roster_id)];
+        const ownerB = ownerByRosterId[String(b.roster_id)];
+        if (!ownerA || !ownerB) continue;
+        const ptsA = Number(a.points || 0);
+        const ptsB = Number(b.points || 0);
+
+        for (const [self, opp, myPts, oppPts] of [[ownerA, ownerB, ptsA, ptsB], [ownerB, ownerA, ptsB, ptsA]]) {
+          if (!records[self]) continue;
+          const won = myPts > oppPts;
+          const tied = myPts === oppPts;
+          records[self].weeklyScores.push({
+            season: Number(season.league?.season || 0),
+            week, points: round(myPts, 2), opponentPoints: round(oppPts, 2),
+            opponentId: opp, won, tied
+          });
+          if (myPts > records[self].highScore) records[self].highScore = round(myPts, 2);
+
+          // Head-to-head
+          if (!records[self].headToHead[opp]) {
+            records[self].headToHead[opp] = { wins: 0, losses: 0, ties: 0, pointsFor: 0, pointsAgainst: 0 };
+          }
+          const h2h = records[self].headToHead[opp];
+          if (won) h2h.wins += 1;
+          else if (tied) h2h.ties += 1;
+          else h2h.losses += 1;
+          h2h.pointsFor += myPts;
+          h2h.pointsAgainst += oppPts;
+        }
+      }
+    }
+  }
+
+  // Compute streaks from weekly scores
+  for (const rec of Object.values(records)) {
+    rec.totalPointsFor = round(rec.totalPointsFor, 1);
+    rec.totalPointsAgainst = round(rec.totalPointsAgainst, 1);
+    const sorted = [...rec.weeklyScores].sort((a, b) => a.season - b.season || a.week - b.week);
+    let curWin = 0;
+    let curLose = 0;
+    for (const ws of sorted) {
+      if (ws.won) { curWin += 1; curLose = 0; }
+      else if (!ws.tied) { curLose += 1; curWin = 0; }
+      if (curWin > rec.maxWinStreak) rec.maxWinStreak = curWin;
+      if (curLose > rec.maxLoseStreak) rec.maxLoseStreak = curLose;
+    }
+    // Current streak = last run
+    rec.winStreak = curWin;
+    rec.loseStreak = curLose;
+  }
+
+  return records;
+}
+
+export function buildRivalries(managerRecord, displayByUserId) {
+  const entries = Object.entries(managerRecord.headToHead || {});
+  const rivalries = entries.map(([oppId, h2h]) => ({
+    opponentId: oppId,
+    opponentName: displayByUserId[oppId] || `Manager ${oppId.slice(0, 4)}`,
+    wins: h2h.wins,
+    losses: h2h.losses,
+    ties: h2h.ties,
+    pointsFor: round(h2h.pointsFor, 1),
+    pointsAgainst: round(h2h.pointsAgainst, 1),
+    games: h2h.wins + h2h.losses + h2h.ties
+  }));
+  rivalries.sort((a, b) => b.games - a.games);
+
+  const nemesis = rivalries.reduce((best, r) => (!best || r.losses > best.losses) ? r : best, null);
+  const favorite = rivalries.reduce((best, r) => (!best || r.wins > best.wins) ? r : best, null);
+
+  return { rivalries, nemesis, favorite };
+}
+
+// ---------------------------------------------------------------------------
+// Activity Feed
+// ---------------------------------------------------------------------------
+
+export function buildActivityFeed(managerId, seasonData, sleeperPlayersById) {
+  const feed = [];
+
+  for (const season of seasonData || []) {
+    const ownerByRosterId = {};
+    const rosterIdsByOwner = {};
+    for (const roster of season.rosters || []) {
+      const rosterId = String(roster.roster_id || "");
+      const ownerId = String(roster.owner_id || "");
+      if (!rosterId || !ownerId) continue;
+      ownerByRosterId[rosterId] = ownerId;
+      if (!rosterIdsByOwner[ownerId]) rosterIdsByOwner[ownerId] = [];
+      rosterIdsByOwner[ownerId].push(rosterId);
+    }
+
+    const myRosterIds = new Set(rosterIdsByOwner[managerId] || []);
+    const seasonYear = Number(season.league?.season || 0);
+
+    for (const tx of season.transactions || []) {
+      if (!isCompletedTransaction(tx)) continue;
+      const type = String(tx.type || "unknown").toLowerCase();
+      const adds = tx.adds || {};
+      const drops = tx.drops || {};
+
+      // Check if this manager is involved
+      const isParticipant = (tx.roster_ids || []).some((rid) => myRosterIds.has(String(rid))) ||
+        Object.values(adds).some((rid) => myRosterIds.has(String(rid))) ||
+        Object.values(drops).some((rid) => myRosterIds.has(String(rid)));
+
+      if (!isParticipant) continue;
+
+      const addedPlayers = [];
+      const droppedPlayers = [];
+
+      for (const [playerId, rosterId] of Object.entries(adds)) {
+        if (myRosterIds.has(String(rosterId))) {
+          const p = sleeperPlayersById[playerId];
+          addedPlayers.push({
+            id: playerId,
+            name: p?.full_name || `Player ${playerId}`,
+            position: p?.position || "",
+            team: p?.team || ""
+          });
+        }
+      }
+      for (const [playerId, rosterId] of Object.entries(drops)) {
+        if (myRosterIds.has(String(rosterId))) {
+          const p = sleeperPlayersById[playerId];
+          droppedPlayers.push({
+            id: playerId,
+            name: p?.full_name || `Player ${playerId}`,
+            position: p?.position || "",
+            team: p?.team || ""
+          });
+        }
+      }
+
+      const faabBid = (type === "waiver") ? Number(tx.settings?.waiver_bid || 0) : null;
+      let description = "";
+      let delta = null;
+
+      if (type === "trade") {
+        const receivedValue = addedPlayers.reduce((s, p) => s + estimateSleeperPlayerValue(sleeperPlayersById[p.id]), 0);
+        const sentValue = droppedPlayers.reduce((s, p) => s + estimateSleeperPlayerValue(sleeperPlayersById[p.id]), 0);
+        delta = round(receivedValue - sentValue, 0);
+        const got = addedPlayers.map((p) => p.name).join(", ") || "picks";
+        const gave = droppedPlayers.map((p) => p.name).join(", ") || "picks";
+        description = `Traded away ${gave} for ${got}`;
+      } else if (type === "waiver") {
+        const added = addedPlayers.map((p) => `${p.name} (${p.position}, ${p.team})`).join(", ");
+        const dropped = droppedPlayers.map((p) => p.name).join(", ");
+        description = `Claimed ${added || "player"}` + (faabBid ? ` for $${faabBid}` : "") + (dropped ? ` · Dropped ${dropped}` : "");
+      } else if (type === "free_agent") {
+        const added = addedPlayers.map((p) => `${p.name} (${p.position}, ${p.team})`).join(", ");
+        const dropped = droppedPlayers.map((p) => p.name).join(", ");
+        description = `Added ${added || "player"}` + (dropped ? ` · Dropped ${dropped}` : "");
+      } else {
+        continue;
+      }
+
+      feed.push({
+        type,
+        timestamp: Number(tx.status_updated || tx.created || 0),
+        dateLabel: `${seasonYear} W${Number(tx._week || 0)}`,
+        description,
+        addedPlayers,
+        droppedPlayers,
+        faabBid,
+        delta
+      });
+    }
+  }
+
+  feed.sort((a, b) => b.timestamp - a.timestamp);
+  return feed.slice(0, 50);
+}
+
+// ---------------------------------------------------------------------------
+// Season-over-Season Trends
+// ---------------------------------------------------------------------------
+
+export function buildSeasonTrends(managerId, seasonData, sleeperPlayersById, myUserId) {
+  const trends = [];
+
+  for (const season of seasonData || []) {
+    const seasonYear = Number(season.league?.season || 0);
+    const ownerByRosterId = {};
+    const displayByUserId = {};
+    const waiverBudget = Number(season.league?.settings?.waiver_budget) || 100;
+
+    for (const user of season.users || []) {
+      const uid = String(user.user_id || "");
+      if (uid) displayByUserId[uid] = user.display_name || user.username || `user-${uid}`;
+    }
+    for (const roster of season.rosters || []) {
+      ownerByRosterId[String(roster.roster_id || "")] = String(roster.owner_id || "");
+    }
+
+    // Find this manager's roster for record
+    const myRoster = (season.rosters || []).find((r) => String(r.owner_id) === managerId);
+    const wins = Number(myRoster?.settings?.wins || 0);
+    const losses = Number(myRoster?.settings?.losses || 0);
+    const ties = Number(myRoster?.settings?.ties || 0);
+    const fp = Number(myRoster?.settings?.fpts || 0) + Number(myRoster?.settings?.fpts_decimal || 0) / 100;
+
+    // Count transactions for this season only
+    let tradeCount = 0;
+    let waiverCount = 0;
+    let faabBidSum = 0;
+    let faabBidCount = 0;
+    let addCount = 0;
+    let dropCount = 0;
+
+    const myRosterIds = new Set();
+    for (const roster of season.rosters || []) {
+      if (String(roster.owner_id) === managerId) myRosterIds.add(String(roster.roster_id));
+    }
+
+    for (const tx of season.transactions || []) {
+      if (!isCompletedTransaction(tx)) continue;
+      const involved = (tx.roster_ids || []).some((rid) => myRosterIds.has(String(rid)));
+      if (!involved) continue;
+
+      const type = String(tx.type || "").toLowerCase();
+      if (type === "trade") tradeCount += 1;
+      if (type === "waiver" || type === "free_agent") {
+        waiverCount += 1;
+        const bid = Number(tx.settings?.waiver_bid || 0);
+        if (bid > 0) { faabBidSum += bid; faabBidCount += 1; }
+      }
+
+      const adds = tx.adds || {};
+      const drops = tx.drops || {};
+      for (const [, rosterId] of Object.entries(adds)) {
+        if (myRosterIds.has(String(rosterId))) addCount += 1;
+      }
+      for (const [, rosterId] of Object.entries(drops)) {
+        if (myRosterIds.has(String(rosterId))) dropCount += 1;
+      }
+    }
+
+    const avgFaabBid = faabBidCount ? round(faabBidSum / faabBidCount, 1) : 0;
+    const totalMoves = addCount + dropCount;
+    const avgBidPct = waiverBudget ? (faabBidCount ? faabBidSum / faabBidCount / waiverBudget : 0) : 0;
+    const aggressionRaw =
+      tradeCount * AGGRESSION_WEIGHTS.tradeCount +
+      waiverCount * AGGRESSION_WEIGHTS.waiverCount +
+      avgBidPct * AGGRESSION_WEIGHTS.avgBidPct +
+      totalMoves * AGGRESSION_WEIGHTS.churnMoves;
+    const profileLabel = managerLabelStyle(tradeCount, avgBidPct, totalMoves, "intel");
+
+    trends.push({
+      season: seasonYear,
+      record: `${wins}-${losses}${ties ? `-${ties}` : ""}`,
+      wins, losses, ties,
+      pointsFor: round(fp, 1),
+      tradeCount,
+      waiverCount,
+      avgFaabBid,
+      aggressionRaw,
+      aggressionScore: 0,
+      totalMoves,
+      profileLabel
+    });
+  }
+
+  // Normalize aggression across seasons
+  const maxRaw = Math.max(...trends.map((t) => t.aggressionRaw), 1);
+  for (const t of trends) {
+    t.aggressionScore = round((t.aggressionRaw / maxRaw) * 100, 1);
+  }
+
+  trends.sort((a, b) => b.season - a.season);
+  return trends;
 }
 
 export function mergeRosterContext(report, latestSeasonData, sleeperPlayersById) {
