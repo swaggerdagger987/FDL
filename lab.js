@@ -1,5 +1,5 @@
-import { bindConnectButton, getSleeperSession, hydrateHeader, setLabContext, updateSelectedLeague } from "./site_state.js";
-import { escapeHtml, sleep } from "./utils.js";
+import { bindConnectButton, currentSleeperSeason, getSleeperSession, hydrateHeader, setLabContext, updateSelectedLeague } from "./site_state.js";
+import { clamp, escapeHtml, sleep } from "./utils.js";
 
 const FALLBACK_METRIC_KEYS = [
   "fantasy_points_ppr",
@@ -1971,10 +1971,6 @@ function getMetricBounds(key) {
   return { min, max, step };
 }
 
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
-
 function formatCompact(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return "-";
@@ -2031,7 +2027,3 @@ function toNumberOrNull(value) {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
-function currentSleeperSeason(now = new Date()) {
-  const year = now.getFullYear();
-  return now.getMonth() + 1 >= 8 ? year : year - 1;
-}

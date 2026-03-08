@@ -14,11 +14,11 @@ import {
   fetchLeagueHistoryChain,
   fetchLeagueSeasonData
 } from "./intel_engine.js";
+import { currentSleeperSeason, fetchSleeperJSON } from "./site_state.js";
 
 const FREE_DAILY_LIMIT = 3;
 const FREE_USAGE_STORAGE_KEY = "fdl_free_usage";
 const BYE_WEEKS = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
-const SLEEPER_API_BASE = "https://api.sleeper.app/v1";
 const CATALOG_WARM_LIMIT = 350;
 const DATALIST_OPTION_LIMIT = 30;
 const REMOTE_SUGGESTION_LIMIT = 40;
@@ -920,17 +920,6 @@ function getActiveRoster() {
   return [...SAMPLE_LEAGUES[0].roster];
 }
 
-async function fetchSleeperJSON(path) {
-  const response = await fetch(`${SLEEPER_API_BASE}${path}`);
-  if (!response.ok) {
-    if (response.status === 404) {
-      throw new Error("Resource not found.");
-    }
-    throw new Error(`Sleeper API returned ${response.status}.`);
-  }
-  return response.json();
-}
-
 async function loadSleeperPlayerCatalog(requestedIds = []) {
   const requested = dedupe((requestedIds || []).map((item) => String(item || "").trim()).filter(Boolean));
   if (!requested.length) {
@@ -1736,12 +1725,6 @@ function downloadFeedback() {
 
 function getTodayIso() {
   return new Date().toISOString().slice(0, 10);
-}
-
-function currentSleeperSeason(now = new Date()) {
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
-  return month >= 8 ? year : year - 1;
 }
 
 function buildPlayerNameIndex(players = []) {

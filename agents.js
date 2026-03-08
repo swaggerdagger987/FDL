@@ -1,4 +1,5 @@
 import { bindConnectButton, getLabContext, getLeagueIntelContext, hydrateHeader } from "./site_state.js";
+import { escapeHtml, sleep } from "./utils.js";
 
 const AGENT_CONFIG_STORAGE_KEY = "fdl.agentConfigs.v1";
 const DEFAULT_MODEL = "openai/gpt-4o-mini";
@@ -362,15 +363,8 @@ function loadAgentConfig() {
   }
 }
 
-function escapeHtml(value) {
-  return String(value || "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
-
 function escapeAttribute(value) {
-  return escapeHtml(value).replaceAll('"', "&quot;");
+  return escapeHtml(value);
 }
 
 function setupAgentSimulationPanel() {
@@ -601,9 +595,6 @@ async function runAgentSimulation(agentId, scenarioText, options = {}) {
   }
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => window.setTimeout(resolve, Math.max(0, Number(ms) || 0)));
-}
 
 function getDemoResponseDelayMs(agent, mode = "brief") {
   const baseByAgent = {
