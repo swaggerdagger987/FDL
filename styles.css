@@ -832,7 +832,6 @@ h3 {
 }
 
 .home-lanes,
-.home-board,
 .home-connect-panel {
   background:
     linear-gradient(172deg, rgba(255, 248, 231, 0.98), rgba(241, 230, 195, 0.96));
@@ -877,10 +876,65 @@ h3 {
   color: #476e53;
 }
 
+/* ── War Room (theme-reactive) ── */
+
+.war-room {
+  background: linear-gradient(172deg, var(--field-850), var(--field-950));
+  border-color: var(--line);
+  transition: background 0.4s ease, border-color 0.3s ease;
+}
+
+.war-room h2 {
+  color: var(--chalk);
+}
+
+.war-room-header {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin-bottom: 0.6rem;
+}
+
+.war-room-helmet {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
+}
+
+.war-room-helmet .helmet-shell {
+  fill: var(--orange);
+  transition: fill 0.4s ease;
+}
+
+.war-room-helmet .helmet-mask {
+  fill: var(--field-950);
+  opacity: 0.7;
+}
+
+.war-room-helmet .helmet-stripe {
+  stroke: var(--chalk);
+  opacity: 0.35;
+}
+
 .home-board-grid {
   display: grid;
   gap: 0.74rem;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.war-room .board-note {
+  background: var(--field-700);
+  border-color: var(--line);
+  transition: background 0.4s ease;
+}
+
+.war-room .board-note h3 {
+  color: var(--chalk);
+}
+
+.war-room .board-note p {
+  color: var(--chalk-soft);
 }
 
 .board-note {
