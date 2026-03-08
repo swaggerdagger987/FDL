@@ -99,6 +99,9 @@ class SyncService:
                     error_message=str(error),
                 )
 
+    def shutdown(self, wait: bool = False) -> None:
+        self._executor.shutdown(wait=wait, cancel_futures=False)
+
     def _run_stub(self, job_id: str, season: int, include_nflverse: bool) -> None:
         with db_transaction() as connection:
             update_sync_job_started(connection, job_id=job_id, started_at=live_data.utc_now_iso())

@@ -53,6 +53,10 @@ def create_app() -> FastAPI:
         if settings.auto_sync_on_start:
             _schedule_startup_sync(settings)
 
+    @app.on_event("shutdown")
+    def on_shutdown() -> None:
+        sync_service.shutdown(wait=False)
+
     @app.exception_handler(RequestValidationError)
     async def handle_validation_error(request: Request, exc: RequestValidationError):
         request_id = getattr(request.state, "request_id", uuid.uuid4().hex)
