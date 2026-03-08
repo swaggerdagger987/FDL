@@ -1642,6 +1642,7 @@ def fetch_screener_query(connection, payload):
     team = str(payload.get("team") or "").strip().upper()
     age_min = parse_float(payload.get("age_min"))
     age_max = parse_float(payload.get("age_max"))
+    relevance = str(payload.get("relevance") or "fantasy").strip().lower()
     limit = max(1, min(parse_int(payload.get("limit"), 200), 1000))
     offset = max(0, parse_int(payload.get("offset"), 0))
     filters = normalize_screen_filters(payload.get("filters"))
@@ -1655,6 +1656,24 @@ def fetch_screener_query(connection, payload):
 
     where_params = []
     where_parts = ["1=1"]
+
+    # Relevance filtering — hide low-caliber / zero-stat players by default.
+    # When a search term is present we always show all players so users can
+    # find anyone.  The "all" setting disables the filter entirely.
+    if relevance == "fantasy" and not search:
+        where_parts.append(
+            """(
+              p.status = 'Active'
+              AND (
+                p.years_exp IS NOT NULL AND p.years_exp <= 1
+                OR EXISTS (
+                  SELECT 1 FROM player_week_stats pws
+                  WHERE pws.player_id = p.player_id
+                    AND pws.fantasy_points_ppr > 0
+                )
+              )
+            )"""
+        )
     filter_join_parts = []
     filter_join_params = []
 
