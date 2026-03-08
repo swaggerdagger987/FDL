@@ -1060,7 +1060,39 @@ def sync_nflverse_player_stats(connection, season):
                 key = (search_name, row.get("recent_team", "") or "", row.get("position", "") or "")
                 player_id = name_map.get(key) or name_map.get((search_name, "", row.get("position", "") or ""))
             if not player_id:
-                continue
+                # Backfill: create a players row from nflverse data so the
+                # name shows up in the screener instead of being silently
+                # dropped.  Use the nflverse gsis_id as player_id to keep
+                # things consistent if Sleeper later recognises the player.
+                display_name = row.get("player_display_name") or row.get("player_name") or ""
+                if not display_name or not stats_player_id:
+                    continue
+                player_id = stats_player_id
+                nfl_position = row.get("position") or row.get("position_group") or ""
+                nfl_team = row.get("recent_team") or ""
+                search_name = normalize_name(display_name)
+                name_parts = display_name.split(None, 1)
+                first_name = name_parts[0] if name_parts else ""
+                last_name = name_parts[1] if len(name_parts) > 1 else ""
+                connection.execute(
+                    """
+                    INSERT INTO players (
+                      player_id, full_name, first_name, last_name,
+                      search_full_name, position, team, status,
+                      gsis_id, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'Active', ?, ?)
+                    ON CONFLICT(player_id) DO NOTHING
+                    """,
+                    (player_id, display_name, first_name, last_name,
+                     search_name, nfl_position, nfl_team,
+                     stats_player_id, now),
+                )
+                # Update lookup maps so subsequent rows for this player
+                # resolve without another INSERT.
+                gsis_map[stats_player_id] = player_id
+                name_key = (search_name, nfl_team, nfl_position)
+                name_map[name_key] = player_id
+                name_map[(search_name, "", nfl_position)] = player_id
 
             touchdowns = (
                 (safe_float(row.get("passing_tds")) or 0)
