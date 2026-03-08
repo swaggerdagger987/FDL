@@ -30,6 +30,8 @@ NFLVERSE_RELEASES_URL = "https://api.github.com/repos/nflverse/nflverse-data/rel
 SLEEPER_WEEK_FETCH_TIMEOUT_SECONDS = 15
 NFLVERSE_ASSET_CACHE_TTL_SECONDS = 24 * 60 * 60
 NFLVERSE_ASSET_CACHE_KEY_PREFIX = "nflverse_player_stats_asset"
+BULK_LOAD_SEASONS_BACK = 3  # How many seasons to bulk-load on bootstrap
+BOOTSTRAP_MIN_PLAYER_COUNT = 100  # Threshold below which we trigger bootstrap
 
 USER_AGENT = "FourthDownLabsTerminal/1.0 (+https://fourthdownlabs.local)"
 NFL_REGULAR_SEASON_WEEKS = 18
@@ -694,6 +696,14 @@ def upsert_profile_metrics_from_players(connection, updated_at=None):
 
 
 def run_full_sync(connection, season=None, include_nflverse=True):
+    """Full sync using nflverse as primary bulk source, Sleeper for current week only.
+
+    Strategy:
+    1. Sync player bios from Sleeper (fast, cached)
+    2. Bulk-load season stats from nflverse (one HTTP call, all weeks)
+    3. Incremental current-week sync from Sleeper (one HTTP call)
+    4. Refresh materialized latest-metrics view
+    """
     initialize_database(connection)
     season = int(season or current_nfl_season())
 
@@ -706,20 +716,23 @@ def run_full_sync(connection, season=None, include_nflverse=True):
         "synced_at": utc_now_iso(),
     }
 
+    # 1. Player bios from Sleeper
     players_result = sync_sleeper_players(connection)
     summary["players_upserted"] = players_result["players_upserted"]
     summary["sources"]["sleeper_players"] = players_result
 
-    sleeper_stats_result = sync_sleeper_weekly_stats(connection, season)
-    summary["stats_rows_upserted"] += sleeper_stats_result["stats_rows_upserted"]
-    summary["metrics_rows_upserted"] += sleeper_stats_result.get("metrics_rows_upserted", 0)
-    summary["sources"]["sleeper_stats"] = sleeper_stats_result
-
+    # 2. Primary: nflverse bulk load for the season
     if include_nflverse:
         nflverse_result = sync_nflverse_player_stats(connection, season)
         summary["stats_rows_upserted"] += nflverse_result["stats_rows_upserted"]
         summary["metrics_rows_upserted"] += nflverse_result.get("metrics_rows_upserted", 0)
         summary["sources"]["nflverse_stats"] = nflverse_result
+
+    # 3. Incremental: current week from Sleeper (fast, single week)
+    current_week_result = sync_sleeper_current_week(connection, season)
+    summary["stats_rows_upserted"] += current_week_result["stats_rows_upserted"]
+    summary["metrics_rows_upserted"] += current_week_result.get("metrics_rows_upserted", 0)
+    summary["sources"]["sleeper_current_week"] = current_week_result
 
     refresh_latest_metrics(connection)
     metric_key_count = connection.execute(
@@ -1128,6 +1141,246 @@ def sync_nflverse_player_stats(connection, season):
         "asset_name": asset.get("name"),
         "asset_season_hint": asset_year,
         "fallback_season_used": fallback_season_used,
+    }
+
+
+def find_all_nflverse_player_stats_assets(connection, seasons):
+    """Find nflverse CSV assets for multiple seasons at once.
+
+    Fetches the releases list once and scores assets for each requested season.
+    Returns a dict mapping season -> asset dict (url, name, season_hint, score).
+    """
+    initialize_database(connection)
+    now = dt.datetime.utcnow()
+
+    # Check cache for each season first
+    result = {}
+    uncached_seasons = []
+    for season in seasons:
+        cache_key = nflverse_asset_cache_key(season=season)
+        cached = read_sync_state(connection, cache_key)
+        if cached:
+            updated_at = cached.get("updated_at")
+            age_seconds = (now - updated_at).total_seconds() if updated_at else None
+            if age_seconds is not None and age_seconds <= NFLVERSE_ASSET_CACHE_TTL_SECONDS:
+                try:
+                    payload = json.loads(cached.get("value") or "{}")
+                    if payload and payload.get("url"):
+                        result[season] = payload
+                        continue
+                except json.JSONDecodeError:
+                    pass
+        uncached_seasons.append(season)
+
+    if not uncached_seasons:
+        return result
+
+    # Fetch releases once for all uncached seasons
+    try:
+        releases = fetch_json(NFLVERSE_RELEASES_URL)
+    except (OSError, ValueError, RuntimeError, json.JSONDecodeError, TimeoutError, urllib.error.URLError):
+        return result
+
+    for season in uncached_seasons:
+        candidates = []
+        for release in releases:
+            tag_name = str(release.get("tag_name", "")).lower()
+            name = str(release.get("name", "")).lower()
+            if "player" not in tag_name and "player" not in name:
+                continue
+            for asset in release.get("assets", []):
+                asset_name = str(asset.get("name", "")).lower()
+                if "player" not in asset_name or "stat" not in asset_name:
+                    continue
+                if not (asset_name.endswith(".csv") or asset_name.endswith(".csv.gz")):
+                    continue
+                asset_year = parse_year_from_name(asset_name)
+                score = 0
+                if "weekly" in asset_name or "_week" in asset_name:
+                    score += 30
+                if asset_year:
+                    score += asset_year
+                    if asset_year == season:
+                        score += 5000
+                    elif asset_year <= season:
+                        score += 500
+                candidates.append({
+                    "url": asset.get("browser_download_url"),
+                    "name": asset.get("name"),
+                    "season_hint": asset_year,
+                    "score": score,
+                })
+
+        if candidates:
+            candidates.sort(key=lambda item: item["score"], reverse=True)
+            best = candidates[0]
+            cache_key = nflverse_asset_cache_key(season=season)
+            upsert_sync_state(connection, cache_key, json.dumps(best))
+            result[season] = best
+
+    return result
+
+
+def bulk_sync_nflverse(connection, seasons=None):
+    """Bulk-load nflverse data for multiple seasons in one pass.
+
+    This is the primary data loading strategy: one HTTP call per season,
+    each yielding all weekly player stats for that entire season.
+    """
+    initialize_database(connection)
+    current = current_nfl_season()
+    if seasons is None:
+        seasons = list(range(current - BULK_LOAD_SEASONS_BACK + 1, current + 1))
+
+    # Sync player bios first (needed for ID matching)
+    players_result = sync_sleeper_players(connection)
+
+    assets = find_all_nflverse_player_stats_assets(connection, seasons)
+    summary = {
+        "seasons_requested": seasons,
+        "seasons_loaded": [],
+        "total_stats_rows": 0,
+        "total_metrics_rows": 0,
+        "players_upserted": players_result["players_upserted"],
+        "errors": [],
+    }
+
+    for season in seasons:
+        asset = assets.get(season)
+        if not asset:
+            summary["errors"].append(f"No nflverse asset found for {season}")
+            continue
+        try:
+            result = sync_nflverse_player_stats(connection, season)
+            summary["seasons_loaded"].append(season)
+            summary["total_stats_rows"] += result["stats_rows_upserted"]
+            summary["total_metrics_rows"] += result.get("metrics_rows_upserted", 0)
+        except Exception as error:
+            summary["errors"].append(f"Season {season}: {error}")
+
+    refresh_latest_metrics(connection)
+    upsert_sync_state(connection, "last_bulk_sync", json.dumps({
+        "seasons": summary["seasons_loaded"],
+        "synced_at": utc_now_iso(),
+    }))
+    upsert_sync_state(connection, "last_sync_report", json.dumps(summary))
+    return summary
+
+
+def sync_sleeper_current_week(connection, season=None):
+    """Incremental sync: fetch only the current week from Sleeper.
+
+    During the active NFL season, call this on a short interval (e.g. 15 min)
+    to keep the latest week fresh. Much faster than a full 18-week sweep.
+    """
+    initialize_database(connection)
+    season = int(season or current_nfl_season())
+    now = utc_now_iso()
+
+    # Determine current week from existing data
+    latest_week_row = connection.execute(
+        "SELECT MAX(week) AS max_week FROM player_week_stats WHERE season = ?",
+        (season,),
+    ).fetchone()
+    latest_week = latest_week_row["max_week"] if latest_week_row and latest_week_row["max_week"] else 0
+
+    # Try to fetch the next week first, then fall back to latest
+    weeks_to_try = []
+    if latest_week < NFL_REGULAR_SEASON_WEEKS:
+        weeks_to_try.append(latest_week + 1)
+    if latest_week > 0:
+        weeks_to_try.append(latest_week)
+
+    rows = []
+    metric_rows = []
+    week_fetched = None
+
+    for week in weeks_to_try:
+        try:
+            payload = fetch_sleeper_week_data(season, week)
+        except (OSError, ValueError, RuntimeError, json.JSONDecodeError, TimeoutError, urllib.error.URLError):
+            continue
+        if not payload:
+            continue
+
+        week_fetched = week
+        for player_id, stats in payload.items():
+            if not isinstance(stats, dict):
+                continue
+            pass_td = safe_float(stats.get("pass_td")) or 0
+            rush_td = safe_float(stats.get("rush_td")) or 0
+            rec_td = safe_float(stats.get("rec_td")) or 0
+            turnovers = (safe_float(stats.get("pass_int")) or 0) + (safe_float(stats.get("fum_lost")) or 0)
+
+            rows.append((
+                str(player_id), season, week, "regular",
+                stats.get("team"), stats.get("opp"),
+                safe_float(stats.get("pts_ppr")),
+                safe_float(stats.get("pts_half_ppr")),
+                safe_float(stats.get("pts_std")),
+                safe_float(stats.get("pass_yd")),
+                safe_float(stats.get("rush_yd")),
+                safe_float(stats.get("rec_yd")),
+                safe_float(stats.get("rec")),
+                pass_td + rush_td + rec_td,
+                turnovers if turnovers else None,
+                json.dumps(stats),
+                "sleeper", now,
+            ))
+
+            metrics = flatten_numeric_metrics(stats)
+            for source_key, alias_key in SLEEPER_METRIC_ALIASES.items():
+                if source_key in metrics and alias_key not in metrics:
+                    metrics[alias_key] = metrics[source_key]
+            metrics["touchdowns"] = pass_td + rush_td + rec_td
+            metrics["turnovers"] = turnovers
+            metric_rows.extend(metric_rows_from_dict(
+                player_id=player_id, season=season, week=week,
+                season_type="regular", source="sleeper",
+                metrics=metrics, updated_at=now,
+            ))
+        break  # Got data for this week, stop trying
+
+    inserted_metrics = upsert_player_week_metrics(connection, metric_rows)
+    inserted_stats = upsert_player_week_stats(connection, rows)
+    if rows or inserted_metrics:
+        connection.commit()
+
+    if rows:
+        refresh_latest_metrics(connection)
+
+    return {
+        "season": season,
+        "week_fetched": week_fetched,
+        "stats_rows_upserted": inserted_stats,
+        "metrics_rows_upserted": inserted_metrics,
+    }
+
+
+def bootstrap_if_empty(connection):
+    """Auto-bootstrap the database if it has insufficient data.
+
+    Called on server startup. If the DB has fewer than BOOTSTRAP_MIN_PLAYER_COUNT
+    players, runs a full nflverse bulk load. Otherwise, just does an incremental
+    current-week Sleeper sync.
+
+    Returns a summary dict describing what was done.
+    """
+    initialize_database(connection)
+    player_count = connection.execute("SELECT COUNT(*) AS value FROM players").fetchone()["value"]
+
+    if player_count < BOOTSTRAP_MIN_PLAYER_COUNT:
+        summary = bulk_sync_nflverse(connection)
+        summary["bootstrap"] = True
+        summary["reason"] = f"player_count={player_count} < threshold={BOOTSTRAP_MIN_PLAYER_COUNT}"
+        return summary
+
+    # DB already has data — just do a quick incremental sync
+    incremental = sync_sleeper_current_week(connection)
+    return {
+        "bootstrap": False,
+        "reason": f"player_count={player_count} already sufficient",
+        "incremental_sync": incremental,
     }
 
 

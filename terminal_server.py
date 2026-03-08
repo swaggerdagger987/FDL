@@ -545,6 +545,17 @@ def main():
 
     with live_data.get_connection() as connection:
         live_data.initialize_database(connection)
+        # Auto-bootstrap: bulk-load from nflverse if DB is empty
+        bootstrap_result = live_data.bootstrap_if_empty(connection)
+        if bootstrap_result.get("bootstrap"):
+            loaded = bootstrap_result.get("seasons_loaded", [])
+            print(f"Bootstrap complete: loaded seasons {loaded}, "
+                  f"players={bootstrap_result.get('players_upserted', 0)} "
+                  f"stats={bootstrap_result.get('total_stats_rows', 0)}")
+        else:
+            inc = bootstrap_result.get("incremental_sync", {})
+            print(f"DB already populated ({bootstrap_result.get('reason', '')}), "
+                  f"incremental sync week={inc.get('week_fetched')}")
         if args.sync_on_start and not sync_on_start_env:
             summary = live_data.run_full_sync(
                 connection,
