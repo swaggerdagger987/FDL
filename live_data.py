@@ -1073,7 +1073,39 @@ def sync_nflverse_player_stats(connection, season):
                 key = (search_name, row.get("recent_team", "") or "", row.get("position", "") or "")
                 player_id = name_map.get(key) or name_map.get((search_name, "", row.get("position", "") or ""))
             if not player_id:
-                continue
+                # Backfill: create a players row from nflverse data so the
+                # name shows up in the screener instead of being silently
+                # dropped.  Use the nflverse gsis_id as player_id to keep
+                # things consistent if Sleeper later recognises the player.
+                display_name = row.get("player_display_name") or row.get("player_name") or ""
+                if not display_name or not stats_player_id:
+                    continue
+                player_id = stats_player_id
+                nfl_position = row.get("position") or row.get("position_group") or ""
+                nfl_team = row.get("recent_team") or ""
+                search_name = normalize_name(display_name)
+                name_parts = display_name.split(None, 1)
+                first_name = name_parts[0] if name_parts else ""
+                last_name = name_parts[1] if len(name_parts) > 1 else ""
+                connection.execute(
+                    """
+                    INSERT INTO players (
+                      player_id, full_name, first_name, last_name,
+                      search_full_name, position, team, status,
+                      gsis_id, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'Active', ?, ?)
+                    ON CONFLICT(player_id) DO NOTHING
+                    """,
+                    (player_id, display_name, first_name, last_name,
+                     search_name, nfl_position, nfl_team,
+                     stats_player_id, now),
+                )
+                # Update lookup maps so subsequent rows for this player
+                # resolve without another INSERT.
+                gsis_map[stats_player_id] = player_id
+                name_key = (search_name, nfl_team, nfl_position)
+                name_map[name_key] = player_id
+                name_map[(search_name, "", nfl_position)] = player_id
 
             touchdowns = (
                 (safe_float(row.get("passing_tds")) or 0)
@@ -1863,6 +1895,7 @@ def fetch_screener_query(connection, payload):
     team = str(payload.get("team") or "").strip().upper()
     age_min = parse_float(payload.get("age_min"))
     age_max = parse_float(payload.get("age_max"))
+    relevance = str(payload.get("relevance") or "fantasy").strip().lower()
     limit = max(1, min(parse_int(payload.get("limit"), 200), 1000))
     offset = max(0, parse_int(payload.get("offset"), 0))
     filters = normalize_screen_filters(payload.get("filters"))
@@ -1876,6 +1909,24 @@ def fetch_screener_query(connection, payload):
 
     where_params = []
     where_parts = ["1=1"]
+
+    # Relevance filtering — hide low-caliber / zero-stat players by default.
+    # When a search term is present we always show all players so users can
+    # find anyone.  The "all" setting disables the filter entirely.
+    if relevance == "fantasy" and not search:
+        where_parts.append(
+            """(
+              p.status = 'Active'
+              AND (
+                p.years_exp IS NOT NULL AND p.years_exp <= 1
+                OR EXISTS (
+                  SELECT 1 FROM player_week_stats pws
+                  WHERE pws.player_id = p.player_id
+                    AND pws.fantasy_points_ppr > 0
+                )
+              )
+            )"""
+        )
     filter_join_parts = []
     filter_join_params = []
 

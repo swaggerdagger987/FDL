@@ -1,5 +1,5 @@
-import { bindConnectButton, getSleeperSession, hydrateHeader, setLabContext, updateSelectedLeague } from "./site_state.js";
-import { escapeHtml, sleep } from "./utils.js";
+import { bindConnectButton, currentSleeperSeason, getSleeperSession, hydrateHeader, setLabContext, updateSelectedLeague } from "./site_state.js";
+import { clamp, escapeHtml, sleep } from "./utils.js";
 
 const FALLBACK_METRIC_KEYS = [
   "fantasy_points_ppr",
@@ -124,7 +124,8 @@ const dom = {
   head: document.querySelector("#screen-results-head"),
   results: document.querySelector("#screen-results"),
   scrollUpBtn: document.querySelector("#lab-scroll-up"),
-  scrollDownBtn: document.querySelector("#lab-scroll-down")
+  scrollDownBtn: document.querySelector("#lab-scroll-down"),
+  relevancePills: document.querySelector("#screen-relevance-pills")
 };
 
 const state = {
@@ -141,7 +142,8 @@ const state = {
   lastItems: [],
   draggingColumnKey: "",
   hasRunOnce: false,
-  showAppliedFilters: false
+  showAppliedFilters: false,
+  relevance: "fantasy"
 };
 
 initialize();
@@ -210,6 +212,9 @@ function wireEvents() {
 
   dom.metricCategories.addEventListener("click", onMetricCategoryClick);
   dom.positionPills.addEventListener("click", onPositionPillClick);
+  if (dom.relevancePills) {
+    dom.relevancePills.addEventListener("click", onRelevancePillClick);
+  }
   if (dom.openAdvancedBtn && dom.advancedDetails) {
     dom.openAdvancedBtn.addEventListener("click", () => {
       dom.advancedDetails.open = true;
@@ -499,6 +504,21 @@ function renderPositionPills() {
       return;
     }
     button.classList.toggle("active", state.selectedPositions.has(position));
+  });
+}
+
+function onRelevancePillClick(event) {
+  const button = event.target.closest("button[data-relevance]");
+  if (!button) return;
+  state.relevance = button.dataset.relevance || "fantasy";
+  renderRelevancePills();
+  scheduleRunScreen();
+}
+
+function renderRelevancePills() {
+  if (!dom.relevancePills) return;
+  dom.relevancePills.querySelectorAll("button[data-relevance]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.relevance === state.relevance);
   });
 }
 
@@ -932,6 +952,7 @@ async function runScreen(options = {}) {
       search: dom.search.value,
       team: dom.team.value,
       positions: selectedPositions,
+      relevance: state.relevance,
       window: buildStatWindowFromUI(),
       limit: state.hasRunOnce ? DEFAULT_SCREEN_LIMIT : INITIAL_SCREEN_LIMIT,
       offset: 0,
@@ -1971,10 +1992,6 @@ function getMetricBounds(key) {
   return { min, max, step };
 }
 
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
-
 function formatCompact(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return "-";
@@ -2031,7 +2048,3 @@ function toNumberOrNull(value) {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
-function currentSleeperSeason(now = new Date()) {
-  const year = now.getFullYear();
-  return now.getMonth() + 1 >= 8 ? year : year - 1;
-}
