@@ -1720,12 +1720,37 @@ def parse_window_config(payload):
     last_n_games = parse_int(raw_window.get("last_n_games") or payload.get("last_n_games"), None)
     if last_n_games is not None:
         last_n_games = max(1, min(int(last_n_games), 64))
+
+    # Multi-season support: comma-separated years or "career"
+    raw_seasons = raw_window.get("seasons") or payload.get("seasons")
+    seasons = None
+    if isinstance(raw_seasons, str):
+        raw_seasons = raw_seasons.strip().lower()
+        if raw_seasons == "career":
+            seasons = "career"
+        elif raw_seasons:
+            parsed = [parse_int(s.strip(), None) for s in raw_seasons.split(",")]
+            parsed = [s for s in parsed if s is not None and 1999 <= s <= 2100]
+            if parsed:
+                seasons = sorted(set(parsed))
+    elif isinstance(raw_seasons, (list, tuple)):
+        parsed = [parse_int(s, None) for s in raw_seasons]
+        parsed = [s for s in parsed if s is not None and 1999 <= s <= 2100]
+        if parsed:
+            seasons = sorted(set(parsed))
+
+    agg_mode = str(raw_window.get("agg_mode") or payload.get("agg_mode") or "per_game").strip().lower()
+    if agg_mode not in ("per_game", "totals"):
+        agg_mode = "per_game"
+
     return {
         "mode": mode,
         "season": season,
         "week_start": week_start,
         "week_end": week_end,
         "last_n_games": last_n_games,
+        "seasons": seasons,
+        "agg_mode": agg_mode,
     }
 
 
@@ -1735,12 +1760,36 @@ def rebuild_window_temp_tables(connection, window):
     week_start = window.get("week_start")
     week_end = window.get("week_end")
     last_n_games = window.get("last_n_games") or 5
+    seasons = window.get("seasons")
+    agg_mode = window.get("agg_mode") or "per_game"
 
     connection.execute("DROP TABLE IF EXISTS temp_selected_games")
     connection.execute("DROP TABLE IF EXISTS temp_window_metrics")
     connection.execute("DROP TABLE IF EXISTS temp_window_stats")
 
-    if mode == "last_game":
+    # Multi-season / career mode takes priority when seasons param is set
+    if seasons is not None:
+        if seasons == "career":
+            connection.execute(
+                """
+                CREATE TEMP TABLE temp_selected_games AS
+                SELECT DISTINCT player_id, season, week
+                FROM player_week_stats
+                WHERE season_type='regular'
+                """
+            )
+        else:
+            placeholders = ",".join(["?"] * len(seasons))
+            connection.execute(
+                f"""
+                CREATE TEMP TABLE temp_selected_games AS
+                SELECT DISTINCT player_id, season, week
+                FROM player_week_stats
+                WHERE season_type='regular' AND season IN ({placeholders})
+                """,
+                seasons,
+            )
+    elif mode == "last_game":
         connection.execute(
             """
             CREATE TEMP TABLE temp_selected_games AS
@@ -1827,13 +1876,15 @@ def rebuild_window_temp_tables(connection, window):
 
     connection.execute("CREATE INDEX IF NOT EXISTS idx_temp_selected_games_player_week ON temp_selected_games(player_id, season, week)")
 
+    agg_func = "SUM" if agg_mode == "totals" else "AVG"
+
     connection.execute(
-        """
+        f"""
         CREATE TEMP TABLE temp_window_metrics AS
         SELECT
           pwm.player_id,
           pwm.stat_key,
-          AVG(pwm.stat_value) AS stat_value
+          {agg_func}(pwm.stat_value) AS stat_value
         FROM player_week_metrics pwm
         JOIN temp_selected_games g
           ON g.player_id = pwm.player_id
@@ -1845,19 +1896,20 @@ def rebuild_window_temp_tables(connection, window):
     connection.execute("CREATE INDEX IF NOT EXISTS idx_temp_window_metrics_key_player ON temp_window_metrics(stat_key, player_id, stat_value)")
 
     connection.execute(
-        """
+        f"""
         CREATE TEMP TABLE temp_window_stats AS
         SELECT
           pws.player_id,
           MAX(pws.season) AS season,
           MAX(pws.week) AS week,
           'window' AS source,
-          AVG(pws.fantasy_points_ppr) AS fantasy_points_ppr,
-          AVG(pws.passing_yards) AS passing_yards,
-          AVG(pws.rushing_yards) AS rushing_yards,
-          AVG(pws.receiving_yards) AS receiving_yards,
-          AVG(pws.receptions) AS receptions,
-          AVG(pws.touchdowns) AS touchdowns
+          {agg_func}(pws.fantasy_points_ppr) AS fantasy_points_ppr,
+          {agg_func}(pws.passing_yards) AS passing_yards,
+          {agg_func}(pws.rushing_yards) AS rushing_yards,
+          {agg_func}(pws.receiving_yards) AS receiving_yards,
+          {agg_func}(pws.receptions) AS receptions,
+          {agg_func}(pws.touchdowns) AS touchdowns,
+          COUNT(DISTINCT pws.season || '-' || pws.week) AS games_played
         FROM player_week_stats pws
         JOIN temp_selected_games g
           ON g.player_id = pws.player_id
@@ -1875,10 +1927,12 @@ def fetch_screener_query(connection, payload):
     window = parse_window_config(payload)
     metrics_table = "player_latest_metrics"
     stats_table = "player_latest_stats"
-    if window["mode"] != "latest":
+    use_window = window["mode"] != "latest" or window.get("seasons") is not None
+    if use_window:
         rebuild_window_temp_tables(connection, window)
         metrics_table = "temp_window_metrics"
         stats_table = "temp_window_stats"
+    games_played_col = "l.games_played AS games_played" if use_window else "NULL AS games_played"
 
     search = str(payload.get("search") or "").strip().lower()
     position = str(payload.get("position") or "").strip().upper()
@@ -1977,6 +2031,7 @@ def fetch_screener_query(connection, payload):
               l.receiving_yards AS latest_receiving_yards,
               l.receptions AS latest_receptions,
               l.touchdowns AS latest_touchdowns,
+              {games_played_col},
               COALESCE(msort.stat_value, COALESCE(l.fantasy_points_ppr, {sort_null_fill})) AS sort_value
             {from_clause}
             LEFT JOIN {stats_table} l ON l.player_id = p.player_id
@@ -1992,6 +2047,7 @@ def fetch_screener_query(connection, payload):
             r.latest_season, r.latest_week, r.latest_source,
             r.latest_fantasy_points_ppr, r.latest_passing_yards, r.latest_rushing_yards,
             r.latest_receiving_yards, r.latest_receptions, r.latest_touchdowns,
+            r.games_played,
             r.sort_value,
             mv.stat_key,
             mv.stat_value
@@ -2024,6 +2080,7 @@ def fetch_screener_query(connection, payload):
                     "latest_receiving_yards": row["latest_receiving_yards"],
                     "latest_receptions": row["latest_receptions"],
                     "latest_touchdowns": row["latest_touchdowns"],
+                    "games_played": row["games_played"],
                     "metrics": {},
                 }
                 items_by_player_id[player_id] = item
@@ -2042,7 +2099,8 @@ def fetch_screener_query(connection, payload):
             l.rushing_yards AS latest_rushing_yards,
             l.receiving_yards AS latest_receiving_yards,
             l.receptions AS latest_receptions,
-            l.touchdowns AS latest_touchdowns
+            l.touchdowns AS latest_touchdowns,
+            {games_played_col}
           {from_clause}
           LEFT JOIN {stats_table} l ON l.player_id = p.player_id
           LEFT JOIN {metrics_table} msort

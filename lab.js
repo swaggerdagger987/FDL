@@ -38,7 +38,8 @@ const FALLBACK_METRIC_KEYS = [
   "turnovers",
   "fumbles_lost",
   "snap_pct",
-  "special_teams_tds"
+  "special_teams_tds",
+  "games_played"
 ];
 
 const STORAGE_KEYS = {
@@ -125,7 +126,9 @@ const dom = {
   results: document.querySelector("#screen-results"),
   scrollUpBtn: document.querySelector("#lab-scroll-up"),
   scrollDownBtn: document.querySelector("#lab-scroll-down"),
-  relevancePills: document.querySelector("#screen-relevance-pills")
+  relevancePills: document.querySelector("#screen-relevance-pills"),
+  seasonPills: document.querySelector("#screen-season-pills"),
+  aggPills: document.querySelector("#screen-agg-pills")
 };
 
 const state = {
@@ -143,7 +146,9 @@ const state = {
   draggingColumnKey: "",
   hasRunOnce: false,
   showAppliedFilters: false,
-  relevance: "fantasy"
+  relevance: "fantasy",
+  selectedSeasons: new Set(["latest"]),
+  aggMode: "per_game"
 };
 
 initialize();
@@ -172,6 +177,8 @@ async function initialize() {
   }
 
   renderPositionPills();
+  renderSeasonPills();
+  renderAggPills();
   renderMetricCategories();
   renderMetricOptions();
   renderActiveColumns();
@@ -214,6 +221,12 @@ function wireEvents() {
   dom.positionPills.addEventListener("click", onPositionPillClick);
   if (dom.relevancePills) {
     dom.relevancePills.addEventListener("click", onRelevancePillClick);
+  }
+  if (dom.seasonPills) {
+    dom.seasonPills.addEventListener("click", onSeasonPillClick);
+  }
+  if (dom.aggPills) {
+    dom.aggPills.addEventListener("click", onAggPillClick);
   }
   if (dom.openAdvancedBtn && dom.advancedDetails) {
     dom.openAdvancedBtn.addEventListener("click", () => {
@@ -519,6 +532,54 @@ function renderRelevancePills() {
   if (!dom.relevancePills) return;
   dom.relevancePills.querySelectorAll("button[data-relevance]").forEach((button) => {
     button.classList.toggle("active", button.dataset.relevance === state.relevance);
+  });
+}
+
+function onSeasonPillClick(event) {
+  const button = event.target.closest("button[data-season]");
+  if (!button) return;
+  const value = button.dataset.season;
+
+  // "latest" and "career" are exclusive — clicking them clears other selections.
+  // Individual years are multi-select (click to toggle), but selecting one clears latest/career.
+  if (value === "latest" || value === "career") {
+    state.selectedSeasons = new Set([value]);
+  } else {
+    const next = new Set(state.selectedSeasons);
+    next.delete("latest");
+    next.delete("career");
+    if (next.has(value)) {
+      next.delete(value);
+    } else {
+      next.add(value);
+    }
+    // If nothing left, fall back to latest
+    if (next.size === 0) next.add("latest");
+    state.selectedSeasons = next;
+  }
+  renderSeasonPills();
+  scheduleRunScreen();
+}
+
+function renderSeasonPills() {
+  if (!dom.seasonPills) return;
+  dom.seasonPills.querySelectorAll("button[data-season]").forEach((button) => {
+    button.classList.toggle("active", state.selectedSeasons.has(button.dataset.season));
+  });
+}
+
+function onAggPillClick(event) {
+  const button = event.target.closest("button[data-agg]");
+  if (!button) return;
+  state.aggMode = button.dataset.agg || "per_game";
+  renderAggPills();
+  scheduleRunScreen();
+}
+
+function renderAggPills() {
+  if (!dom.aggPills) return;
+  dom.aggPills.querySelectorAll("button[data-agg]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.agg === state.aggMode);
   });
 }
 
@@ -968,7 +1029,8 @@ async function runScreen(options = {}) {
 
     const sortedItems = sortItems(items);
     renderResults(sortedItems);
-    dom.count.textContent = `${sortedItems.length} players`;
+    const windowDesc = describeStatWindow(buildStatWindowFromUI());
+    dom.count.textContent = `${sortedItems.length} players · ${windowDesc}`;
     updateSortLabel();
     persistLastView();
     publishLabContext(sortedItems, filters);
@@ -1564,7 +1626,9 @@ function getCurrentViewConfig() {
       valueMax: String(item.valueMax ?? "")
     })),
     sort_key: state.sortKey,
-    sort_direction: state.sortDirection
+    sort_direction: state.sortDirection,
+    selected_seasons: [...state.selectedSeasons],
+    agg_mode: state.aggMode
   };
 }
 
@@ -1609,6 +1673,14 @@ function applyViewConfig(rawConfig) {
 
   state.sortKey = String(config.sort_key || "fantasy_points_ppr");
   state.sortDirection = String(config.sort_direction || "desc") === "asc" ? "asc" : "desc";
+
+  // Restore multi-season and aggregation state
+  if (Array.isArray(config.selected_seasons) && config.selected_seasons.length) {
+    state.selectedSeasons = new Set(config.selected_seasons.map((s) => String(s)));
+  } else {
+    state.selectedSeasons = new Set(["latest"]);
+  }
+  state.aggMode = config.agg_mode === "totals" ? "totals" : "per_game";
 }
 
 function normalizeOperator(value) {
@@ -1755,16 +1827,41 @@ function buildStatWindowFromUI() {
   const weekStart = toNumberOrNull(dom.statWeekStart?.value);
   const weekEnd = toNumberOrNull(dom.statWeekEnd?.value);
   const lastNGames = toNumberOrNull(dom.statLastN?.value);
+
+  // Multi-season pills override the single season input
+  const selected = [...state.selectedSeasons];
+  let seasons = null;
+  if (selected.length === 1 && selected[0] === "latest") {
+    // No override — use stat window mode as-is
+  } else if (selected.length === 1 && selected[0] === "career") {
+    seasons = "career";
+  } else if (selected.length > 0) {
+    seasons = selected.join(",");
+  }
+
   return {
     mode,
     season,
     week_start: weekStart,
     week_end: weekEnd,
-    last_n_games: lastNGames
+    last_n_games: lastNGames,
+    seasons,
+    agg_mode: state.aggMode
   };
 }
 
 function describeStatWindow(windowConfig) {
+  const seasons = windowConfig?.seasons;
+  const aggLabel = windowConfig?.agg_mode === "totals" ? "totals" : "per game";
+
+  // Multi-season description takes priority
+  if (seasons === "career") return `career ${aggLabel}`;
+  if (typeof seasons === "string" && seasons.length > 0) {
+    const years = seasons.split(",").map((s) => s.trim()).filter(Boolean);
+    if (years.length > 2) return `${years.length} seasons · ${aggLabel}`;
+    if (years.length > 0) return `${years.join(", ")} · ${aggLabel}`;
+  }
+
   const mode = String(windowConfig?.mode || "last_game");
   if (mode === "latest") return "latest snapshot";
   if (mode === "last_game") return "last game";
